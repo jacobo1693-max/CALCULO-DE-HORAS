@@ -137,6 +137,24 @@
   .subtabs button.active{ background:var(--navy); border-color:var(--navy); color:#fff; }
   .subpanel{ display:none; }
   .subpanel.active{ display:block; }
+
+  /* impresión */
+  #printArea{ display:none; }
+  #printArea .print-head{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid var(--navy); padding-bottom:12px; margin-bottom:16px; }
+  #printArea .print-head h1{ font-family:var(--display); font-size:19px; margin:0 0 3px; color:var(--navy); }
+  #printArea .print-head p{ margin:0; font-size:12px; color:var(--ink-soft); }
+  #printArea .print-meta{ text-align:right; font-size:11.5px; color:var(--ink-soft); }
+  #printArea .print-stats{ display:flex; gap:18px; margin-bottom:14px; flex-wrap:wrap; }
+  #printArea .print-stats div{ font-size:12.5px; }
+  #printArea .print-stats b{ display:block; font-family:var(--mono); font-size:16px; color:var(--navy); }
+  @media print{
+    body *{ visibility:hidden; }
+    #printArea, #printArea *{ visibility:visible; }
+    #printArea{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0; }
+    table{ font-size:11.5px; }
+    .tag{ border:1px solid currentColor; }
+    @page{ margin:14mm; }
+  }
 </style>
 </head>
 <body>
@@ -364,6 +382,7 @@
       </div>
       <button class="btn" id="btnLoadWeek">Ver resumen</button>
       <button class="btn secondary" id="btnQuickWeek">Semana actual</button>
+      <button class="btn secondary" id="btnPrintWeek" disabled>Imprimir</button>
     </div>
     <div id="weekArea"></div>
   </section>
@@ -406,12 +425,15 @@
       </div>
       <button class="btn" id="btnGenReport">Generar reporte</button>
       <button class="btn secondary" id="btnExportReport" disabled>Exportar a Excel</button>
+      <button class="btn secondary" id="btnPrintReport" disabled>Imprimir</button>
     </div>
     <div id="reportArea"></div>
   </section>
 
   <footer class="foot">Los datos (incluidas fotos) se guardan solo en tu navegador (almacenamiento del artefacto), no se comparten con nadie.</footer>
 </div>
+
+<div id="printArea"></div>
 
 <div class="toast" id="toast"></div>
 
@@ -1051,6 +1073,7 @@ document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
     html = `<div class="hint" style="margin-top:14px;">Ningún empleado en esta vista tiene sueldo por hora capturado todavía — agrégalo en la pestaña <b>Empleados</b> para ver el pago calculado.</div>` + html;
   }
   area.innerHTML = html;
+  document.getElementById('btnPrintWeek').disabled = false;
 });
 
 /* ---------- calendario ---------- */
@@ -1169,6 +1192,7 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
   html += `</tbody></table>`;
   area.innerHTML = html;
   document.getElementById('btnExportReport').disabled = false;
+  document.getElementById('btnPrintReport').disabled = false;
 });
 document.getElementById('btnExportReport').addEventListener('click', ()=>{
   const rep = window._lastReport; if(!rep) return;
@@ -1196,6 +1220,55 @@ function emptyState(msg){
     <div>${msg}</div>
   </div>`;
 }
+
+/* ---------- impresión ---------- */
+function nowStamp(){
+  const d = new Date();
+  return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function printSection(title, subtitle, bodyHtml){
+  const area = document.getElementById('printArea');
+  area.innerHTML = `
+    <div class="print-head">
+      <div>
+        <h1>${title}</h1>
+        <p>${subtitle}</p>
+      </div>
+      <div class="print-meta">Generado el ${nowStamp()}</div>
+    </div>
+    ${bodyHtml}
+  `;
+  window.print();
+}
+document.getElementById('btnPrintReport').addEventListener('click', ()=>{
+  const rep = window._lastReport; if(!rep) return;
+  const statsHtml = `<div class="print-stats">
+    <div>Horas totales<b>${fmtHM(rep.totalMins)}</b></div>
+    <div>Horas extra<b>${fmtHM(rep.totalExtraMins)}</b></div>
+    <div>Retardos<b>${rep.retardos}</b></div>
+    <div>Faltas<b>${rep.faltas}</b></div>
+    <div>Sueldo/hora<b>${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</b></div>
+    <div>Pago total<b>${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</b></div>
+  </div>`;
+  const tableHtml = document.getElementById('reportArea').querySelector('table').outerHTML;
+  printSection(
+    'Reporte de asistencia',
+    `${rep.nombre} (${rep.id}) · Del ${rep.from} al ${rep.to}`,
+    statsHtml + tableHtml
+  );
+});
+document.getElementById('btnPrintWeek').addEventListener('click', ()=>{
+  const from = document.getElementById('weekDesde').value;
+  const to = document.getElementById('weekHasta').value;
+  const empSel = document.getElementById('weekEmpleado').value;
+  const empLabel = empSel==='__all__' ? 'Todos los empleados' : employeeDisplayName(empSel);
+  const tableHtml = document.getElementById('weekArea').querySelector('table')?.outerHTML || '<p>Sin datos.</p>';
+  printSection(
+    'Resumen de asistencia por periodo',
+    `${empLabel} · Del ${from} al ${to}`,
+    tableHtml
+  );
+});
 
 /* ---------- init ---------- */
 loadStorage();
