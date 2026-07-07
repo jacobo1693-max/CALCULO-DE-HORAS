@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Financiero - Iglesia Rosal</title>
+<style>
+  :root {
+    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0efec;
+    --border: #e0ddd6; --text: #1a1a18; --text-2: #6b6862; --text-muted: #99958c;
+    --success: #1d9e75; --danger: #e24b4a; --warning-bg: #faeeda; --warning-text: #854f0b;
+    --accent: #2a78d6; --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px 60px; }
+  #app { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 20px; }
+  .kpis { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .kpi { flex: 1; min-width: 130px; background: var(--surface-2); border-radius: var(--radius); padding: 14px; }
+  .kpi p:first-child { font-size: 13px; color: var(--text-2); margin: 0 0 4px; }
+  .kpi p:last-child { font-size: 20px; font-weight: 600; margin: 0; }
+  .kpi.warn { background: var(--warning-bg); }
+  .kpi.warn p { color: var(--warning-text); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 20px; }
+  .card p.title { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4px; }
+  input, select { width: 100%; height: 36px; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 10px; font-size: 14px; background: var(--surface); color: var(--text); }
+  button { height: 38px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 14px; }
+  button:hover { background: var(--surface-2); }
+  #btn-add { width: 100%; margin-top: 12px; background: var(--accent); color: white; border: none; font-weight: 500; }
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filtro-btn.active { background: var(--text); color: white; }
+  #buscar { flex: 1; min-width: 160px; }
+  #conteo { font-size: 13px; color: var(--text-2); margin: 0 0 8px; }
+  #lista { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 24px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .row:last-child { border-bottom: none; }
+  .row.warn { background: var(--warning-bg); }
+  .row .desc { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+  .row select.cat-select { height: 26px; font-size: 12px; padding: 0 6px; width: auto; display: inline-block; }
+  .row .fecha { font-size: 12px; color: var(--text-2); }
+  .row .monto { font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .monto.pos { color: var(--success); }
+  .monto.neg { color: var(--danger); }
+  #err { color: var(--danger); font-size: 13px; margin: 8px 0 0; display: none; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Control Financiero - Iglesia Rosal 2026</h1>
+
+  <div class="kpis">
+    <div class="kpi"><p>Saldo actual (MXN)</p><p id="kpi-saldo">$0</p></div>
+    <div class="kpi"><p>Ingresos 2026</p><p id="kpi-ing" style="color:var(--success)">$0</p></div>
+    <div class="kpi"><p>Gastos 2026</p><p id="kpi-gas" style="color:var(--danger)">$0</p></div>
+    <div class="kpi warn"><p>Por revisar</p><p id="kpi-revisar">0</p></div>
+  </div>
+
+  <div class="card">
+    <p class="title">Registrar movimiento</p>
+    <div class="grid">
+      <div><label>Fecha</label><input type="date" id="f-fecha"></div>
+      <div><label>Tipo</label><select id="f-tipo"><option value="I">Ingreso</option><option value="G">Gasto</option></select></div>
+      <div><label>Moneda</label><select id="f-moneda"><option value="MXN">MXN</option><option value="USD">USD</option></select></div>
+      <div><label>Monto</label><input type="number" id="f-monto" step="0.01" placeholder="0.00"></div>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div><label>Categoría</label><select id="f-cat"></select></div>
+      <div style="grid-column: span 2"><label>Descripción</label><input type="text" id="f-desc" placeholder="Ej. Ofrenda dominical, pago de luz..."></div>
+    </div>
+    <button id="btn-add">Agregar movimiento</button>
+    <p id="err"></p>
+  </div>
+
+  <div class="filtros">
+    <button class="filtro-btn active" data-f="todos">Todos</button>
+    <button class="filtro-btn" data-f="Ingreso">Ingresos</button>
+    <button class="filtro-btn" data-f="Gasto">Gastos</button>
+    <button class="filtro-btn" data-f="revisar" style="border-color:var(--warning-text);color:var(--warning-text)">Por revisar</button>
+    <input type="text" id="buscar" placeholder="Buscar por descripción...">
+  </div>
+
+  <p id="conteo"></p>
+  <div id="lista"></div>
+
+  <div class="card">
+    <p class="title">Gastos por categoría (MXN)</p>
+    <div style="position:relative;width:100%;height:320px">
+      <canvas id="chart" role="img" aria-label="Gráfica de barras de gastos por categoría en pesos mexicanos"></canvas>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const TIPO_CAMBIO = 18.5;
+const CATS_ING = ["Ofrenda Dominical","Ofrenda de Acción de Gracias","Ofrenda Especial","Ayuda para Enfermos","Pago Casa Móvil","Donativo Especial","Otros Ingresos"];
+const CATS_GAS = ["Gas / Calefacción","Mantenimiento Iglesia / Oficina","Limpieza de Iglesia","Luz / Electricidad","Agua","Teléfono / Internet","Seguro contra Incendio","Mantenimiento Casa Pastoral","Mantenimiento Auto Pastoral","Sueldo Pastor","Seguro Médico Pastor","Estudio y Libros Pastor","Mantenimiento Patio / Escuela","Trompetas / Banda","Evangelistas y Viajes","Comida Festiva y Flores","Comida Jóvenes","Emprendimientos Jóvenes","Escuela Bíblica Vacacional","Material Escuela Dominical","Ayuda Social / Armenkasse","Insumos de Cocina","Gimnasio","Cuotas / Comisiones Bancarias","Construcción de Iglesia","Imprevistos","Tesorero","Reparaciones Vehículo Iglesia","Otros Gastos"];
+
+const SEED = [["2025-04-13", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 220.0], ["2026-01-01", "G", "Trompetas / Banda", "Abram Wall Posaunen", "USD", 960.0], ["2026-01-03", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-01-03", "G", "Mantenimiento Auto Pastoral", "Hans Klassen Apoyo Gasolina", "MXN", 2000.0], ["2026-01-06", "G", "Otros Gastos", "Pancho Thiessen Cena Año Nuevo", "MXN", 5480.0], ["2026-01-11", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10400.0], ["2026-01-11", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 436.0], ["2026-01-14", "G", "Otros Gastos", "Lisa Bergen Donas", "MXN", 750.0], ["2026-01-17", "G", "Otros Gastos", "Jovanny", "MXN", 11666.41], ["2026-01-18", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 12600.0], ["2026-01-18", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 130.0], ["2026-01-24", "G", "Insumos de Cocina", "lisa Bergen GYM Kuchen Sachen", "MXN", 6400.0], ["2026-01-25", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9900.0], ["2026-01-25", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 170.0], ["2026-01-28", "G", "Insumos de Cocina", "Gr Super Market", "MXN", 2300.0], ["2026-02-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 16300.0], ["2026-02-01", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-02-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 20.0], ["2026-02-02", "G", "Mantenimiento Iglesia / Oficina", "Renta de Tigeras", "MXN", 1600.0], ["2026-02-02", "G", "Reparaciones Vehículo Iglesia", "Reparacion Vehiculo Iglecia", "MXN", 4000.0], ["2026-02-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9900.0], ["2026-02-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 100.0], ["2026-02-14", "G", "Limpieza de Iglesia", "Anna Friessen Kirche Säbern", "MXN", 13647.0], ["2026-02-15", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8550.0], ["2026-02-15", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 10.0], ["2026-02-20", "G", "Otros Gastos", "recuadacion de rentas", "MXN", 488.0], ["2026-02-20", "G", "Ayuda Social / Armenkasse", "Ana Wolf Rame Hilfen", "MXN", 5000.0], ["2026-02-20", "G", "Otros Gastos", "Eva Peters", "MXN", 11725.96], ["2026-02-21", "G", "Gas / Calefacción", "Gas 19 Para la Iglecia", "MXN", 8923.0], ["2026-02-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 13800.0], ["2026-02-22", "G", "Otros Gastos", "Johan Reimer Boletos Pastor", "USD", 920.0], ["2026-03-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 11520.0], ["2026-03-01", "G", "Comida Jóvenes", "PAULINA Froesse Jugend essen", "MXN", 13958.0], ["2026-03-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 115.0], ["2026-03-04", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-03-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10200.0], ["2026-03-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 45.0], ["2026-03-11", "G", "Otros Gastos", "isaak Wall Reparacion", "MXN", 5917.42], ["2026-03-14", "G", "Otros Gastos", "Greta Klassen", "MXN", 1235.0], ["2026-03-19", "G", "Otros Gastos", "Eva Peters", "MXN", 11867.14], ["2026-03-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 19690.0], ["2026-03-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 95.0], ["2026-03-29", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 13000.0], ["2026-03-29", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 60.0], ["2026-04-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 6550.0], ["2026-04-05", "G", "Sueldo Pastor", "Prediger Lohn", "MXN", 53000.0], ["2026-04-05", "G", "Otros Gastos", "Pancho thiessen Reparacion", "USD", 200.0], ["2026-04-12", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10500.0], ["2026-04-16", "G", "Otros Gastos", "Eva Peters", "MXN", 12272.4], ["2026-04-19", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 7730.0], ["2026-04-19", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 50.0], ["2026-04-22", "G", "Otros Gastos", "Susa Neufeld copra de melodias", "MXN", 3200.0], ["2026-04-26", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 7000.0], ["2026-04-26", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 135.0], ["2026-04-27", "G", "Mantenimiento Iglesia / Oficina", "Compra Papel Hihenico", "MXN", 877.0], ["2026-04-30", "G", "Otros Gastos", "Anna Wolf Compra de tortillas", "MXN", 800.0], ["2026-05-02", "G", "Otros Gastos", "Delfina Froesse   Bibel Schule", "MXN", 3560.0], ["2026-05-02", "G", "Comida Jóvenes", "delfina Froesse   Jugend  Essen", "MXN", 4280.0], ["2026-05-03", "G", "Sueldo Pastor", "Prediger Lohn", "MXN", 53000.0], ["2026-05-03", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 10.0], ["2026-05-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9500.0], ["2026-05-07", "G", "Otros Gastos", "Greta Klassen", "MXN", 975.0], ["2026-05-08", "G", "Limpieza de Iglesia", "Anna Friessen Kirche Saubern", "MXN", 13140.0], ["2026-05-08", "G", "Insumos de Cocina", "Super Market", "MXN", 7128.41], ["2026-05-09", "G", "Otros Gastos", "reparacion frenos", "MXN", 1599.16], ["2026-05-10", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 4700.0], ["2026-05-10", "G", "Otros Gastos", "Kinderheim la junta", "MXN", 41000.0], ["2026-05-10", "G", "Otros Gastos", "Blunem Mutters Tag", "MXN", 2500.0], ["2026-05-10", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 120.0], ["2026-05-13", "G", "Otros Gastos", "Linda Friessen", "MXN", 389.0], ["2026-05-13", "G", "Otros Gastos", "Linda Friessen", "MXN", 4240.0], ["2026-05-14", "G", "Insumos de Cocina", "Super Market", "MXN", 258.0], ["2026-05-16", "G", "Otros Gastos", "reparacion frenos", "MXN", 360.0], ["2026-05-16", "G", "Otros Gastos", "Hans Klassen", "MXN", 3000.0], ["2026-05-16", "G", "Insumos de Cocina", "Super Market", "MXN", 7816.02], ["2026-05-16", "G", "Insumos de Cocina", "Super Market", "MXN", 9588.66], ["2026-05-16", "G", "Otros Gastos", "Sara Froessen Frauen Desayuno", "MXN", 1084.0], ["2026-05-17", "G", "Otros Gastos", "Anna Wolf Familien Tag", "MXN", 925.0], ["2026-05-20", "G", "Otros Gastos", "Greta Klassen", "MXN", 1749.0], ["2026-05-22", "G", "Otros Gastos", "Hans Klassen", "MXN", 15000.0], ["2026-05-24", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8040.0], ["2026-05-24", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 220.0], ["2026-05-29", "G", "Escuela Bíblica Vacacional", "Paulina Froesse Bible Schule", "MXN", 7000.0], ["2026-05-29", "G", "Comida Jóvenes", "Paulina Froesse Jugend Essen", "MXN", 13587.0], ["2026-05-31", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10400.0], ["2026-06-01", "G", "Sueldo Pastor", "Hans Klassen Preiger Lohn", "MXN", 48000.0], ["2026-06-01", "G", "Mantenimiento Iglesia / Oficina", "Compra de papel para baños", "MXN", 681.9], ["2026-06-07", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 17600.0], ["2026-06-07", "G", "Comida Jóvenes", "Corny Froesse  Jugend Essen", "MXN", 3500.0], ["2026-06-07", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 240.0], ["2026-06-09", "G", "Otros Gastos", "Escuela La Esperanza", "MXN", 46320.0], ["2026-06-11", "G", "Limpieza de Iglesia", "Anna Friessen Kieche Säubern", "MXN", 10680.0], ["2026-06-12", "G", "Mantenimiento Casa Pastoral", "Hans Klassen Prediger Haus", "MXN", 1234.0], ["2026-06-14", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8900.0], ["2026-06-15", "G", "Comida Jóvenes", "Lisa Penner MiniJugend Essen", "MXN", 1787.0], ["2026-06-16", "G", "Seguro contra Incendio", "General Seguros", "MXN", 2478.0], ["2026-06-20", "G", "Comida Jóvenes", "Hans Klassen Jugend Essen", "MXN", 626.0], ["2026-06-20", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 10000.0], ["2026-06-20", "G", "Otros Gastos", "Radiobotchaften", "USD", 1197.0], ["2026-06-21", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10520.0], ["2026-06-21", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 330.0], ["2026-06-23", "G", "Otros Gastos", "Jugend <<reise Ruidoso", "USD", 1500.0], ["2026-06-26", "G", "Otros Gastos", "Greta Klassen Ferien BibleSchule", "MXN", 512.0], ["2026-06-26", "G", "Insumos de Cocina", "Gr Super Ferien Bibelschule", "MXN", 5072.86], ["2026-06-26", "G", "Gas / Calefacción", "Gas Ferien Bibelschle", "MXN", 1615.22], ["2026-06-27", "G", "Comida Jóvenes", "Delfina Jugend essen", "MXN", 2602.0], ["2026-06-27", "G", "Gas / Calefacción", "Greta Klassen Gas Ferien BibleSchule", "MXN", 1500.0], ["2026-06-27", "G", "Otros Gastos", "Delfina Jugend ferien bilbel", "MXN", 635.0], ["2026-06-28", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 15200.0], ["2026-06-28", "G", "Otros Gastos", "Niel Enns Reparacion Iglecia", "MXN", 4000.0], ["2026-06-28", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 120.0], ["2026-07-03", "G", "Gas / Calefacción", "Lisa Bergen Gas Ferien Bible", "MXN", 2450.0], ["2026-07-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 32700.0], ["2026-07-05", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 38000.0], ["2026-07-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 60.0], ["2026-07-14", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 70.0]]
+;
+
+let items = [];
+let chart;
+let filtro = 'todos';
+const KEY = 'iglesia-movimientos-v1';
+
+function fmt(n){ return '$' + Math.round(n).toLocaleString('es-MX'); }
+function toMXN(item){ return item.moneda === 'USD' ? item.monto * TIPO_CAMBIO : item.monto; }
+
+function populateCat(sel, tipo){
+  const list = tipo === 'I' ? CATS_ING : CATS_GAS;
+  sel.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join('');
+}
+
+document.getElementById('f-tipo').addEventListener('change', e=>{
+  populateCat(document.getElementById('f-cat'), e.target.value);
+});
+populateCat(document.getElementById('f-cat'), 'I');
+document.getElementById('f-fecha').valueAsDate = new Date();
+
+document.querySelectorAll('.filtro-btn').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('.filtro-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    filtro = b.dataset.f; render();
+  });
+});
+document.getElementById('buscar').addEventListener('input', render);
+
+function render(){
+  const saldo = items.reduce((s,i)=> s + (i.tipo==='I' ? toMXN(i) : -toMXN(i)), 0);
+  document.getElementById('kpi-saldo').textContent = fmt(saldo);
+  document.getElementById('kpi-ing').textContent = fmt(items.filter(i=>i.tipo==='I').reduce((s,i)=>s+toMXN(i),0));
+  document.getElementById('kpi-gas').textContent = fmt(items.filter(i=>i.tipo==='G').reduce((s,i)=>s+toMXN(i),0));
+  document.getElementById('kpi-revisar').textContent = items.filter(i=>i.cat==='Otros Gastos').length;
+
+  const q = document.getElementById('buscar').value.toLowerCase();
+  let filtered = items.filter(i=>{
+    if(filtro==='Ingreso' && i.tipo!=='I') return false;
+    if(filtro==='Gasto' && i.tipo!=='G') return false;
+    if(filtro==='revisar' && i.cat!=='Otros Gastos') return false;
+    if(q && !(i.desc.toLowerCase().includes(q) || i.cat.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  filtered.sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
+  document.getElementById('conteo').textContent = filtered.length + ' movimiento(s)';
+
+  const lista = document.getElementById('lista');
+  if(filtered.length===0){
+    lista.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:14px;margin:0">No hay movimientos con este filtro.</p>';
+  } else {
+    lista.innerHTML = filtered.map(i=>{
+      const catList = i.tipo==='I' ? CATS_ING : CATS_GAS;
+      const opts = catList.map(c=>`<option value="${c}" ${c===i.cat?'selected':''}>${c}</option>`).join('');
+      const needsReview = i.cat==='Otros Gastos';
+      return `
+      <div class="row ${needsReview?'warn':''}">
+        <div style="flex:1;min-width:0">
+          <p class="desc">${i.desc}</p>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+            <select data-id="${i.id}" class="cat-select">${opts}</select>
+            <span class="fecha">${new Date(i.fecha).toLocaleDateString('es-MX')}</span>
+          </div>
+        </div>
+        <p class="monto ${i.tipo==='I'?'pos':'neg'}">
+          ${i.tipo==='I' ? '+' : '-'}${i.moneda==='USD' ? '$'+i.monto.toFixed(2)+' USD' : fmt(i.monto)}
+        </p>
+      </div>`;
+    }).join('');
+    lista.querySelectorAll('.cat-select').forEach(sel=>{
+      sel.addEventListener('change', e=>{
+        const id = e.target.dataset.id;
+        const it = items.find(x=>x.id===id);
+        if(it){ it.cat = e.target.value; save(); render(); }
+      });
+    });
+  }
+
+  const gastos = items.filter(i=>i.tipo==='G');
+  const byCat = {};
+  gastos.forEach(i=>{ byCat[i.cat] = (byCat[i.cat]||0) + toMXN(i); });
+  const labels = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).slice(0,8);
+  const data = labels.map(l=>Math.round(byCat[l]));
+
+  if(chart) chart.destroy();
+  chart = new Chart(document.getElementById('chart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Gasto (MXN)', data, backgroundColor: '#2a78d6', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch(e) { console.error(e); }
+}
+function load(){
+  try {
+    const r = localStorage.getItem(KEY);
+    items = r ? JSON.parse(r) : null;
+  } catch(e) { items = null; }
+  if(!items){
+    items = SEED.map((t,idx)=>({id:'seed-'+idx, fecha:t[0], tipo:t[1], cat:t[2], desc:t[3], moneda:t[4], monto:t[5]}));
+    save();
+  }
+  render();
+}
+
+document.getElementById('btn-add').addEventListener('click', ()=>{
+  const fecha = document.getElementById('f-fecha').value;
+  const tipo = document.getElementById('f-tipo').value;
+  const moneda = document.getElementById('f-moneda').value;
+  const monto = parseFloat(document.getElementById('f-monto').value);
+  const cat = document.getElementById('f-cat').value;
+  const desc = document.getElementById('f-desc').value || cat;
+  const err = document.getElementById('err');
+  if(!fecha || !monto || monto<=0){
+    err.textContent = 'Ingresa una fecha y un monto válido.';
+    err.style.display = 'block';
+    return;
+  }
+  err.style.display = 'none';
+  items.push({id:'m-'+Date.now(), fecha, tipo, cat, desc, moneda, monto});
+  save();
+  document.getElementById('f-monto').value = '';
+  document.getElementById('f-desc').value = '';
+  render();
+});
+
+load();
+</script>
+</body>
+</html>
