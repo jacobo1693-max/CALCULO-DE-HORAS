@@ -176,6 +176,7 @@
     <button data-tab="week">Resumen por periodo</button>
     <button data-tab="calendar">Calendario</button>
     <button data-tab="report">Reporte por empleado</button>
+    <button data-tab="faltas">Faltas y retardos</button>
   </nav>
 
   <!-- IMPORT -->
@@ -299,12 +300,23 @@
 
     <div class="subpanel active" id="sub-turnos">
       <div class="form-card">
+        <input type="hidden" id="turEditingKey" value="">
         <div class="row">
-          <div class="field"><label>Nombre del turno</label><input type="text" id="turNombre" placeholder="Ej. Matutino"></div>
-          <div class="field"><label>Hora de entrada</label><input type="time" id="turEntrada" value="08:00"></div>
-          <div class="field"><label>Hora de salida</label><input type="time" id="turSalida" value="17:00"></div>
-          <div class="field"><label>Tolerancia (min)</label><input type="number" id="turTolerancia" value="10" min="0"></div>
-          <button class="btn" id="btnAddTurno">Agregar turno</button>
+          <div class="field" style="min-width:220px;"><label>Nombre del turno</label><input type="text" id="turNombre2" placeholder="Ej. Turno General"></div>
+          <div class="field"><label>Tolerancia (min)</label><input type="number" id="turTolerancia2" value="10" min="0"></div>
+        </div>
+        <h3>Horario por día</h3>
+        <p class="sub">Si un día tiene comida partida, llena "Salida a comer" y "Regreso". Si no aplica, déjalos vacíos. Puedes poner un horario distinto en cada día — por ejemplo, que el sábado salga más tarde para completar tus horas de la semana sin que se cuente como hora extra: ese tiempo ya forma parte de su jornada normal de ese día.</p>
+        <div style="overflow-x:auto;">
+        <table id="turDiasTable">
+          <thead><tr><th>Día</th><th>Laborable</th><th>Entrada</th><th>Salida a comer</th><th>Regreso</th><th>Salida final</th><th>Horas del día</th></tr></thead>
+          <tbody id="turDiasBody"></tbody>
+        </table>
+        </div>
+        <div class="row" style="margin-top:16px;">
+          <button class="btn" id="btnSaveTurno2">Agregar turno</button>
+          <button class="btn secondary" id="btnCancelEditTurno" style="display:none;">Cancelar edición</button>
+          <span class="sub" id="turMsg" style="margin:0;"></span>
         </div>
       </div>
       <div id="turnosTableArea"></div>
@@ -430,6 +442,59 @@
     <div id="reportArea"></div>
   </section>
 
+  <!-- FALTAS Y RETARDOS -->
+  <section class="panel" id="panel-faltas">
+    <h2>Reporte de faltas y retardos</h2>
+    <p class="sub">Lista lista para imprimir con el nombre y la fecha de cada falta injustificada o retardo. Elige uno, varios o todos los empleados.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Empleados a incluir</label>
+        <select id="frModo">
+          <option value="all">Todos los empleados</option>
+          <option value="one">Un solo empleado</option>
+          <option value="some">Selección de varios</option>
+        </select>
+      </div>
+      <div class="field" id="frUnoWrap" style="display:none;">
+        <label>Empleado</label>
+        <select id="frUnoEmpleado"></select>
+      </div>
+      <div class="field">
+        <label>Desde</label>
+        <input type="date" id="frDesde">
+      </div>
+      <div class="field">
+        <label>Hasta</label>
+        <input type="date" id="frHasta">
+      </div>
+    </div>
+
+    <div id="frVariosWrap" style="display:none; margin-top:14px;">
+      <div class="row">
+        <div class="field" style="min-width:220px;">
+          <label>Buscar empleado</label>
+          <input type="text" id="frBuscar" placeholder="Nombre o número...">
+        </div>
+        <button class="btn secondary small" id="frTodos">Seleccionar todos</button>
+        <button class="btn secondary small" id="frNinguno">Quitar todos</button>
+      </div>
+      <div id="frCheckList" style="max-height:220px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-top:10px; background:#fbfcfd;"></div>
+    </div>
+
+    <div class="checkrow" style="margin-top:16px;">
+      <label><input type="checkbox" id="frTipoFalta" checked> Incluir faltas injustificadas</label>
+      <label><input type="checkbox" id="frTipoRetardo" checked> Incluir retardos</label>
+    </div>
+
+    <div class="row" style="margin-top:16px;">
+      <button class="btn" id="btnGenFR">Generar reporte</button>
+      <button class="btn secondary" id="btnExportFR" disabled>Exportar a Excel</button>
+      <button class="btn secondary" id="btnPrintFR" disabled>Imprimir</button>
+    </div>
+    <div id="frArea"></div>
+  </section>
+
   <footer class="foot">Los datos (incluidas fotos) se guardan solo en tu navegador (almacenamiento del artefacto), no se comparten con nadie.</footer>
 </div>
 
@@ -548,8 +613,20 @@ async function loadStorage(){
   try{ const c = await window.storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
   try{ const e2 = await window.storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
   try{ const t = await window.storage.get('bm160-turnos', false); if(t&&t.value) TURNOS = JSON.parse(t.value); }catch(e){ TURNOS=[]; }
+  // migración: turnos guardados con el formato viejo (un solo horario para todos los días)
+  TURNOS = TURNOS.map(t=>{
+    if(!t.dias){
+      const dias = {};
+      [0,1,2,3,4,5,6].forEach(dow=>{
+        dias[dow] = { activo: dow>=1 && dow<=5, entrada: t.entrada||'08:00', salida1: t.salida||'17:00', entrada2:'', salida2:'' };
+      });
+      return { id:t.id, nombre:t.nombre, tolerancia: t.tolerancia||10, dias };
+    }
+    return t;
+  });
   try{ const cod = await window.storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
   applyConfigToForm();
+  buildTurDiasRows(null);
   renderEmployeesTable();
   renderTurnosTable();
   renderCodigosTable();
@@ -760,7 +837,7 @@ document.getElementById('empFotoInput').addEventListener('change', (e)=>{
 });
 function refreshTurnoCodigoSelects(){
   const tSel = document.getElementById('empTurno');
-  tSel.innerHTML = '<option value="">-- sin turno específico --</option>' + TURNOS.map(t=>`<option value="${t.id}">${t.nombre} (${t.entrada}-${t.salida})</option>`).join('');
+  tSel.innerHTML = '<option value="">-- sin turno específico --</option>' + TURNOS.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
   const cSel = document.getElementById('empCodigo');
   cSel.innerHTML = '<option value="">-- sin código --</option>' + CODIGOS.map(c=>`<option value="${c.id}">${c.clave} — ${c.nombre}</option>`).join('');
 }
@@ -856,15 +933,100 @@ function renderEmployeesTable(){
   area.innerHTML = html;
 }
 
-/* ---------- turnos ---------- */
-document.getElementById('btnAddTurno').addEventListener('click', ()=>{
-  const nombre = document.getElementById('turNombre').value.trim();
+/* ---------- turnos (horario por día) ---------- */
+const DOW_ORDER = [1,2,3,4,5,6,0];
+const DOW_LABELS = {1:'Lunes',2:'Martes',3:'Miércoles',4:'Jueves',5:'Viernes',6:'Sábado',0:'Domingo'};
+
+function minsBetween(t1,t2){
+  if(!t1 || !t2) return 0;
+  const [h1,m1] = t1.split(':').map(Number);
+  const [h2,m2] = t2.split(':').map(Number);
+  return (h2*60+m2)-(h1*60+m1);
+}
+function buildTurDiasRows(schedule){
+  const body = document.getElementById('turDiasBody');
+  body.innerHTML = DOW_ORDER.map(dow=>{
+    const d = (schedule && schedule[dow]) || { activo: dow>=1&&dow<=5, entrada:'08:00', salida1:'17:00', entrada2:'', salida2:'' };
+    return `<tr data-dow="${dow}">
+      <td><b>${DOW_LABELS[dow]}</b></td>
+      <td><input type="checkbox" id="tur_d${dow}_activo" ${d.activo?'checked':''}></td>
+      <td><input type="time" id="tur_d${dow}_entrada" value="${d.entrada||''}" style="width:110px;"></td>
+      <td><input type="time" id="tur_d${dow}_salida1" value="${d.salida1||''}" style="width:110px;"></td>
+      <td><input type="time" id="tur_d${dow}_entrada2" value="${d.entrada2||''}" style="width:110px;"></td>
+      <td><input type="time" id="tur_d${dow}_salida2" value="${d.salida2||''}" style="width:110px;"></td>
+      <td class="mono" id="tur_d${dow}_horas">—</td>
+    </tr>`;
+  }).join('');
+  DOW_ORDER.forEach(dow=>{
+    ['activo','entrada','salida1','entrada2','salida2'].forEach(f=>{
+      const el = document.getElementById(`tur_d${dow}_${f}`);
+      el.addEventListener('input', ()=>updateTurDiaHoras(dow));
+      el.addEventListener('change', ()=>updateTurDiaHoras(dow));
+    });
+    updateTurDiaHoras(dow);
+  });
+}
+function updateTurDiaHoras(dow){
+  const activo = document.getElementById(`tur_d${dow}_activo`).checked;
+  const cell = document.getElementById(`tur_d${dow}_horas`);
+  if(!activo){ cell.textContent='—'; return; }
+  const entrada = document.getElementById(`tur_d${dow}_entrada`).value;
+  const salida1 = document.getElementById(`tur_d${dow}_salida1`).value;
+  const entrada2 = document.getElementById(`tur_d${dow}_entrada2`).value;
+  const salida2 = document.getElementById(`tur_d${dow}_salida2`).value;
+  let mins = minsBetween(entrada, salida1) + minsBetween(entrada2, salida2);
+  cell.textContent = mins>0 ? fmtHM(mins) : '—';
+}
+function collectTurDias(){
+  const dias = {};
+  DOW_ORDER.forEach(dow=>{
+    dias[dow] = {
+      activo: document.getElementById(`tur_d${dow}_activo`).checked,
+      entrada: document.getElementById(`tur_d${dow}_entrada`).value,
+      salida1: document.getElementById(`tur_d${dow}_salida1`).value,
+      entrada2: document.getElementById(`tur_d${dow}_entrada2`).value,
+      salida2: document.getElementById(`tur_d${dow}_salida2`).value
+    };
+  });
+  return dias;
+}
+function resetTurnoForm(){
+  document.getElementById('turEditingKey').value='';
+  document.getElementById('turNombre2').value='';
+  document.getElementById('turTolerancia2').value=10;
+  buildTurDiasRows(null);
+  document.getElementById('btnSaveTurno2').textContent='Agregar turno';
+  document.getElementById('btnCancelEditTurno').style.display='none';
+}
+document.getElementById('btnSaveTurno2').addEventListener('click', ()=>{
+  const nombre = document.getElementById('turNombre2').value.trim();
   if(!nombre){ toast('Ponle un nombre al turno.'); return; }
-  TURNOS.push({ id: uid(), nombre, entrada: document.getElementById('turEntrada').value, salida: document.getElementById('turSalida').value, tolerancia: +document.getElementById('turTolerancia').value||0 });
-  document.getElementById('turNombre').value='';
-  saveStorage(); renderTurnosTable(); refreshTurnoCodigoSelects();
-  toast('Turno agregado.');
+  const tolerancia = +document.getElementById('turTolerancia2').value || 0;
+  const dias = collectTurDias();
+  const editingKey = document.getElementById('turEditingKey').value;
+  const data = { id: editingKey || uid(), nombre, tolerancia, dias };
+  if(editingKey){
+    const idx = TURNOS.findIndex(t=>t.id===editingKey);
+    if(idx>-1) TURNOS[idx] = data;
+  } else {
+    TURNOS.push(data);
+  }
+  saveStorage(); renderTurnosTable(); refreshTurnoCodigoSelects(); resetTurnoForm();
+  toast('Turno guardado.');
 });
+document.getElementById('btnCancelEditTurno').addEventListener('click', resetTurnoForm);
+function editTurno(id){
+  const t = TURNOS.find(x=>x.id===id); if(!t) return;
+  document.getElementById('turEditingKey').value = id;
+  document.getElementById('turNombre2').value = t.nombre;
+  document.getElementById('turTolerancia2').value = t.tolerancia||10;
+  buildTurDiasRows(t.dias);
+  document.getElementById('btnSaveTurno2').textContent = 'Guardar cambios';
+  document.getElementById('btnCancelEditTurno').style.display='inline-block';
+  document.querySelector('nav.tabs button[data-tab=shifts]').click();
+  document.querySelector('.subtabs button[data-sub=turnos]').click();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
 function deleteTurno(id){
   TURNOS = TURNOS.filter(t=>t.id!==id);
   EMPLOYEES.forEach(e=>{ if(e.turnoId===id) e.turnoId=''; });
@@ -874,10 +1036,16 @@ function renderTurnosTable(){
   const area = document.getElementById('turnosTableArea');
   refreshTurnoCodigoSelects();
   if(!TURNOS.length){ area.innerHTML = emptyState('No hay turnos definidos todavía.'); return; }
-  let html = `<table><thead><tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Tolerancia</th><th></th></tr></thead><tbody>`;
+  let html = `<table><thead><tr><th>Nombre</th><th>Horario</th><th>Tolerancia</th><th></th></tr></thead><tbody>`;
   TURNOS.forEach(t=>{
-    html += `<tr><td><b>${t.nombre}</b></td><td class="mono">${t.entrada}</td><td class="mono">${t.salida}</td><td class="mono">${t.tolerancia} min</td>
-    <td><button class="btn danger small" onclick="deleteTurno('${t.id}')">Eliminar</button></td></tr>`;
+    const resumen = DOW_ORDER.filter(dow=>t.dias && t.dias[dow] && t.dias[dow].activo).map(dow=>{
+      const d = t.dias[dow];
+      let horario = `${d.entrada||'?'}–${d.salida1||'?'}`;
+      if(d.entrada2 && d.salida2) horario += ` / ${d.entrada2}–${d.salida2}`;
+      return `<b>${DOW_LABELS[dow].slice(0,3)}</b> ${horario}`;
+    }).join('<br>');
+    html += `<tr><td><b>${t.nombre}</b></td><td style="font-size:12px; line-height:1.6;">${resumen||'—'}</td><td class="mono">${t.tolerancia||0} min</td>
+    <td><button class="btn secondary small" onclick="editTurno('${t.id}')">Editar</button> <button class="btn danger small" onclick="deleteTurno('${t.id}')">Eliminar</button></td></tr>`;
   });
   html += `</tbody></table>`;
   area.innerHTML = html;
@@ -942,9 +1110,10 @@ function getSueldoHora(id){
 function fmtMoney(n){
   return '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
-function computePagoDia(id, totalMins){
+function computePagoDia(id, fecha, totalMins){
   const sueldoHora = getSueldoHora(id);
-  const jornadaMins = (CONFIG.jornada || 8) * 60;
+  const sched = getScheduleFor(id, fecha);
+  const jornadaMins = sched.expectedMins;
   const normalMins = Math.min(totalMins, jornadaMins);
   const extraMins = Math.max(0, totalMins - jornadaMins);
   const mult = CONFIG.multiplicador || 2;
@@ -952,17 +1121,25 @@ function computePagoDia(id, totalMins){
   const pagoExtra = (extraMins/60) * sueldoHora * mult;
   return { sueldoHora, normalMins, extraMins, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra };
 }
-function getScheduleFor(id){
+function getScheduleFor(id, fecha){
+  const dow = new Date(fecha+'T00:00:00').getDay();
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(emp && emp.turnoId){
     const t = TURNOS.find(x=>x.id===emp.turnoId);
-    if(t) return { entrada: t.entrada, tolerancia: t.tolerancia };
+    if(t && t.dias && t.dias[dow]){
+      const d = t.dias[dow];
+      if(!d.activo) return { activo:false, entrada:null, tolerancia:t.tolerancia||0, expectedMins:0 };
+      const expectedMins = minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
+      return { activo:true, entrada:d.entrada||null, tolerancia:t.tolerancia||0, expectedMins };
+    }
   }
-  return { entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia };
+  const activo = CONFIG.dias.includes(dow);
+  return { activo, entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0 };
 }
-function isLate(id, dayPunches){
+function isLate(id, dayPunches, fecha){
   if(!dayPunches.length) return false;
-  const sched = getScheduleFor(id);
+  const sched = getScheduleFor(id, fecha);
+  if(!sched.entrada) return false;
   const [eh, em] = sched.entrada.split(':').map(Number);
   const d = new Date(dayPunches[0].ts);
   const limitMins = eh*60+em+sched.tolerancia;
@@ -1003,6 +1180,13 @@ function refreshAllEmployeeSelects(){
   const week = document.getElementById('weekEmpleado'); const weekCur = week.value;
   week.innerHTML = '<option value="__all__">Todos los empleados</option>' + opts;
   if(weekCur && (weekCur==='__all__' || ids.includes(weekCur))) week.value = weekCur;
+
+  const frUno = document.getElementById('frUnoEmpleado'); const frUnoCur = frUno.value;
+  frUno.innerHTML = '<option value="">-- selecciona empleado --</option>' + opts;
+  if(ids.includes(frUnoCur)) frUno.value = frUnoCur;
+  if(document.getElementById('frModo').value==='some'){
+    renderFRCheckList(document.getElementById('frBuscar').value);
+  }
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -1010,17 +1194,16 @@ function computeEmployeePeriod(id, from, to){
   const days = dateRange(from, to);
   let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pago=0;
   days.forEach(fecha=>{
-    const dow = new Date(fecha+'T00:00:00').getDay();
-    const laborable = CONFIG.dias.includes(dow);
+    const sched = getScheduleFor(id, fecha);
     const info = computeDay(id, fecha);
     totalMins += info.totalMins;
-    const p = computePagoDia(id, info.totalMins);
+    const p = computePagoDia(id, fecha, info.totalMins);
     extraMins += p.extraMins;
     pago += p.pagoTotal;
-    if(laborable){
+    if(sched.activo){
       laborables++;
       if(info.punches.length===0) faltas++;
-      else if(isLate(id, info.punches)) retardos++;
+      else if(isLate(id, info.punches, fecha)) retardos++;
     }
   });
   const sueldoHora = getSueldoHora(id);
@@ -1096,12 +1279,13 @@ function renderCalendar(){
     const d = new Date(yr, mo-1, day);
     const fecha = isoDate(d);
     const dow = d.getDay();
-    const laborable = CONFIG.dias.includes(dow);
+    const sched = getScheduleFor(empId, fecha);
+    const laborable = sched.activo;
     const info = computeDay(empId, fecha);
     let cls = 'neutral', label='';
     if(laborable){
       if(info.punches.length===0){ cls='absent'; label='Falta'; }
-      else if(isLate(empId, info.punches)){ cls='late'; label='Retardo'; }
+      else if(isLate(empId, info.punches, fecha)){ cls='late'; label='Retardo'; }
       else { cls='ok'; label='A tiempo'; }
     }
     html += `<div class="cal-cell ${cls}">
@@ -1141,21 +1325,21 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
   const days = dateRange(from, to);
   let totalMins=0, retardos=0, faltas=0;
   const rows = days.map(fecha=>{
-    const dow = new Date(fecha+'T00:00:00').getDay();
-    const laborable = CONFIG.dias.includes(dow);
+    const sched = getScheduleFor(id, fecha);
+    const laborable = sched.activo;
     const info = computeDay(id, fecha);
     totalMins += info.totalMins;
     let status='neutral', label='No laborable';
     if(laborable){
       if(info.punches.length===0){ status='absent'; label='Falta'; faltas++; }
-      else{ const late = isLate(id, info.punches); if(late){status='late'; label='Retardo'; retardos++;} else {status='ok'; label='A tiempo';} }
+      else{ const late = isLate(id, info.punches, fecha); if(late){status='late'; label='Retardo'; retardos++;} else {status='ok'; label='A tiempo';} }
     }
     return { fecha, laborable, info, status, label };
   });
   const sueldoHora = getSueldoHora(id);
   let totalExtraMins = 0, totalPago = 0;
   rows.forEach(r=>{
-    const p = computePagoDia(id, r.info.totalMins);
+    const p = computePagoDia(id, r.fecha, r.info.totalMins);
     r.pago = p;
     totalExtraMins += p.extraMins;
     totalPago += p.pagoTotal;
@@ -1220,6 +1404,124 @@ function emptyState(msg){
     <div>${msg}</div>
   </div>`;
 }
+
+/* ---------- reporte de faltas y retardos ---------- */
+document.getElementById('frModo').addEventListener('change', ()=>{
+  const modo = document.getElementById('frModo').value;
+  document.getElementById('frUnoWrap').style.display = modo==='one' ? 'flex' : 'none';
+  document.getElementById('frVariosWrap').style.display = modo==='some' ? 'block' : 'none';
+  if(modo==='some') renderFRCheckList(document.getElementById('frBuscar').value);
+});
+function renderFRCheckList(filter){
+  const ids = allKnownEmployeeIds();
+  const list = document.getElementById('frCheckList');
+  const f = (filter||'').toLowerCase();
+  const filtered = ids.filter(id=> employeeDisplayName(id).toLowerCase().includes(f) || id.toLowerCase().includes(f));
+  if(!filtered.length){ list.innerHTML = '<div class="sub" style="margin:0;">Sin resultados.</div>'; return; }
+  const prevChecked = new Set(Array.from(list.querySelectorAll('input:checked')).map(i=>i.value));
+  list.innerHTML = filtered.map(id=>`<label style="display:block; padding:4px 0; font-size:13px;"><input type="checkbox" value="${id}" ${prevChecked.has(id)?'checked':''}> ${employeeDisplayName(id)} <span class="mono" style="color:var(--ink-soft);">(${id})</span></label>`).join('');
+}
+document.getElementById('frBuscar').addEventListener('input', (e)=> renderFRCheckList(e.target.value));
+document.getElementById('frTodos').addEventListener('click', ()=>{
+  document.querySelectorAll('#frCheckList input[type=checkbox]').forEach(cb=>cb.checked=true);
+});
+document.getElementById('frNinguno').addEventListener('click', ()=>{
+  document.querySelectorAll('#frCheckList input[type=checkbox]').forEach(cb=>cb.checked=false);
+});
+function getSelectedIdsFR(){
+  const modo = document.getElementById('frModo').value;
+  if(modo==='all') return allKnownEmployeeIds();
+  if(modo==='one'){ const v = document.getElementById('frUnoEmpleado').value; return v ? [v] : []; }
+  return Array.from(document.querySelectorAll('#frCheckList input:checked')).map(i=>i.value);
+}
+function getLateMinutes(id, dayPunches, fecha){
+  if(!dayPunches.length) return 0;
+  const sched = getScheduleFor(id, fecha);
+  if(!sched.entrada) return 0;
+  const [eh, em] = sched.entrada.split(':').map(Number);
+  const d = new Date(dayPunches[0].ts);
+  const limitMins = eh*60+em+sched.tolerancia;
+  const actualMins = d.getHours()*60+d.getMinutes();
+  return Math.max(0, actualMins - limitMins);
+}
+document.getElementById('btnGenFR').addEventListener('click', ()=>{
+  const ids = getSelectedIdsFR();
+  const from = document.getElementById('frDesde').value;
+  const to = document.getElementById('frHasta').value;
+  const wantFaltas = document.getElementById('frTipoFalta').checked;
+  const wantRetardos = document.getElementById('frTipoRetardo').checked;
+  const area = document.getElementById('frArea');
+  if(!ids.length){ toast('Elige al menos un empleado.'); return; }
+  if(!from || !to){ toast('Elige el rango de fechas.'); return; }
+  if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
+  if(!wantFaltas && !wantRetardos){ toast('Elige al menos un tipo de incidencia.'); return; }
+
+  const days = dateRange(from, to);
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const rows = [];
+  ids.forEach(id=>{
+    days.forEach(fecha=>{
+      const sched = getScheduleFor(id, fecha);
+      if(!sched.activo) return;
+      const info = computeDay(id, fecha);
+      if(info.punches.length===0){
+        if(wantFaltas) rows.push({ id, nombre: employeeDisplayName(id), fecha, dow: new Date(fecha+'T00:00:00').getDay(), tipo:'Falta injustificada', detalle:'No se registraron checadas' });
+      } else if(wantRetardos){
+        const lateMins = getLateMinutes(id, info.punches, fecha);
+        if(lateMins>0) rows.push({ id, nombre: employeeDisplayName(id), fecha, dow: new Date(fecha+'T00:00:00').getDay(), tipo:'Retardo', detalle: `Llegó ${info.punches[0].hora.slice(0,5)} · ${lateMins} min tarde` });
+      }
+    });
+  });
+  rows.sort((a,b)=> a.fecha===b.fecha ? a.nombre.localeCompare(b.nombre) : (a.fecha<b.fecha?-1:1));
+  window._lastFR = { rows, from, to, ids };
+
+  const totalFaltas = rows.filter(r=>r.tipo==='Falta injustificada').length;
+  const totalRetardos = rows.filter(r=>r.tipo==='Retardo').length;
+  const empleadosAfectados = new Set(rows.map(r=>r.id)).size;
+
+  let html = `<div class="stat-grid">
+    <div class="stat"><div class="n">${totalFaltas}</div><div class="l">Faltas injustificadas</div></div>
+    <div class="stat"><div class="n">${totalRetardos}</div><div class="l">Retardos</div></div>
+    <div class="stat"><div class="n">${empleadosAfectados}</div><div class="l">Empleados con incidencias</div></div>
+  </div>`;
+
+  if(!rows.length){
+    html += emptyState('No se encontraron faltas ni retardos en este rango para los empleados seleccionados.');
+  } else {
+    html += `<table><thead><tr><th>Empleado</th><th>No.</th><th>Fecha</th><th>Día</th><th>Tipo</th><th>Detalle</th></tr></thead><tbody>`;
+    rows.forEach(r=>{
+      const tagCls = r.tipo==='Falta injustificada' ? 'absent' : 'late';
+      html += `<tr>
+        <td><b>${r.nombre}</b></td>
+        <td class="mono">${r.id}</td>
+        <td class="mono">${r.fecha}</td>
+        <td>${dayNames[r.dow]}</td>
+        <td><span class="tag ${tagCls}">${r.tipo}</span></td>
+        <td>${r.detalle}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  area.innerHTML = html;
+  document.getElementById('btnExportFR').disabled = !rows.length;
+  document.getElementById('btnPrintFR').disabled = !rows.length;
+});
+document.getElementById('btnExportFR').addEventListener('click', ()=>{
+  const rep = window._lastFR; if(!rep || !rep.rows.length) return;
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const data = rep.rows.map(r=>({ Empleado:r.nombre, 'No.':r.id, Fecha:r.fecha, Dia:dayNames[r.dow], Tipo:r.tipo, Detalle:r.detalle }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Faltas y retardos');
+  XLSX.writeFile(wb, `faltas_retardos_${rep.from}_a_${rep.to}.xlsx`);
+});
+document.getElementById('btnPrintFR').addEventListener('click', ()=>{
+  const rep = window._lastFR; if(!rep) return;
+  const tableHtml = document.getElementById('frArea').querySelector('table')?.outerHTML || '<p>Sin incidencias.</p>';
+  const modo = document.getElementById('frModo').value;
+  const label = modo==='all' ? 'Todos los empleados' : modo==='one' ? employeeDisplayName(document.getElementById('frUnoEmpleado').value) : `${rep.ids.length} empleados seleccionados`;
+  printSection('Reporte de faltas y retardos', `${label} · Del ${rep.from} al ${rep.to}`, tableHtml);
+});
 
 /* ---------- impresión ---------- */
 function nowStamp(){
