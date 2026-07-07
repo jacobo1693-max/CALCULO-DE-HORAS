@@ -3,232 +3,1162 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control Financiero - Iglesia Rosal</title>
+<title>Control de Asistencia · Checador BM160</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #f5f4f1; --surface: #ffffff; --surface-2: #f0efec;
-    --border: #e0ddd6; --text: #1a1a18; --text-2: #6b6862; --text-muted: #99958c;
-    --success: #1d9e75; --danger: #e24b4a; --warning-bg: #faeeda; --warning-text: #854f0b;
-    --accent: #2a78d6; --radius: 8px;
+  :root{
+    --bg:#eef1f4;
+    --panel:#ffffff;
+    --ink:#13233b;
+    --ink-soft:#4b5b70;
+    --line:#dbe1e8;
+    --navy:#13233b;
+    --navy-2:#1f3a5f;
+    --teal:#0b6e4f;
+    --teal-soft:#e3f3ec;
+    --amber:#c2780c;
+    --amber-soft:#fbf0dd;
+    --red:#b3261e;
+    --red-soft:#fbe9e8;
+    --violet:#5b3ea6;
+    --violet-soft:#ece6f7;
+    --mono:'JetBrains Mono', monospace;
+    --display:'Space Grotesk', sans-serif;
+    --body:'Inter', sans-serif;
   }
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 24px 16px 60px; }
-  #app { max-width: 720px; margin: 0 auto; }
-  h1 { font-size: 20px; font-weight: 600; margin: 0 0 20px; }
-  .kpis { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-  .kpi { flex: 1; min-width: 130px; background: var(--surface-2); border-radius: var(--radius); padding: 14px; }
-  .kpi p:first-child { font-size: 13px; color: var(--text-2); margin: 0 0 4px; }
-  .kpi p:last-child { font-size: 20px; font-weight: 600; margin: 0; }
-  .kpi.warn { background: var(--warning-bg); }
-  .kpi.warn p { color: var(--warning-text); }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 20px; }
-  .card p.title { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-  label { font-size: 12px; color: var(--text-2); display: block; margin-bottom: 4px; }
-  input, select { width: 100%; height: 36px; border: 1px solid var(--border); border-radius: var(--radius); padding: 0 10px; font-size: 14px; background: var(--surface); color: var(--text); }
-  button { height: 38px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 14px; }
-  button:hover { background: var(--surface-2); }
-  #btn-add { width: 100%; margin-top: 12px; background: var(--accent); color: white; border: none; font-weight: 500; }
-  .filtros { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-  .filtro-btn.active { background: var(--text); color: white; }
-  #buscar { flex: 1; min-width: 160px; }
-  #conteo { font-size: 13px; color: var(--text-2); margin: 0 0 8px; }
-  #lista { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 24px; }
-  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  .row:last-child { border-bottom: none; }
-  .row.warn { background: var(--warning-bg); }
-  .row .desc { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
-  .row select.cat-select { height: 26px; font-size: 12px; padding: 0 6px; width: auto; display: inline-block; }
-  .row .fecha { font-size: 12px; color: var(--text-2); }
-  .row .monto { font-size: 14px; font-weight: 600; white-space: nowrap; }
-  .monto.pos { color: var(--success); }
-  .monto.neg { color: var(--danger); }
-  #err { color: var(--danger); font-size: 13px; margin: 8px 0 0; display: none; }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--body);
+    min-height:100vh;
+  }
+  .wrap{ max-width:1220px; margin:0 auto; padding:28px 20px 80px; }
+
+  .card-header{
+    background:var(--navy); color:#fff; border-radius:16px; padding:22px 26px;
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+    position:relative; overflow:hidden;
+  }
+  .card-header::before{
+    content:""; position:absolute; left:0; top:0; bottom:0; width:14px;
+    background-image: radial-gradient(circle, rgba(255,255,255,.35) 2.6px, transparent 2.7px);
+    background-size: 14px 16px; background-position:center;
+  }
+  .card-header .title{ padding-left:16px; }
+  .card-header h1{ font-family:var(--display); font-size:22px; margin:0 0 4px; letter-spacing:.2px;}
+  .card-header p{ margin:0; color:#b9c6d8; font-size:13px;}
+  .clock{ font-family:var(--mono); font-size:28px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); padding:10px 16px; border-radius:10px; letter-spacing:1px;}
+
+  nav.tabs{ display:flex; gap:6px; margin:22px 0 18px; flex-wrap:wrap; }
+  nav.tabs button{
+    font-family:var(--body); font-weight:600; font-size:13px; color:var(--ink-soft);
+    background:var(--panel); border:1px solid var(--line); padding:9px 14px; border-radius:10px;
+    cursor:pointer; transition:.15s;
+  }
+  nav.tabs button:hover{ border-color:var(--navy-2); color:var(--navy);}
+  nav.tabs button.active{ background:var(--navy); border-color:var(--navy); color:#fff; }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:24px; display:none; }
+  .panel.active{ display:block; }
+  h2{ font-family:var(--display); font-size:18px; margin:0 0 4px; }
+  h3{ font-family:var(--display); font-size:15px; margin:22px 0 4px; }
+  .sub{ color:var(--ink-soft); font-size:13px; margin:0 0 18px; }
+
+  .row{ display:flex; gap:14px; flex-wrap:wrap; align-items:flex-end; }
+  .field{ display:flex; flex-direction:column; gap:6px; min-width:160px; }
+  .field label{ font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; }
+  input[type=file], input[type=date], input[type=month], input[type=number], input[type=time], input[type=text], select{
+    font-family:var(--body); font-size:14px; padding:9px 11px; border:1px solid var(--line);
+    border-radius:8px; background:#fbfcfd; color:var(--ink);
+  }
+  input:focus, select:focus{ outline:2px solid var(--navy-2); outline-offset:1px; }
+
+  button.btn{
+    font-family:var(--body); font-weight:700; font-size:13.5px; color:#fff; background:var(--navy);
+    border:none; padding:10px 18px; border-radius:9px; cursor:pointer; transition:.15s;
+  }
+  button.btn:hover{ background:var(--navy-2); }
+  button.btn.secondary{ background:#fff; color:var(--navy); border:1px solid var(--line); }
+  button.btn.secondary:hover{ border-color:var(--navy-2); }
+  button.btn.danger{ background:var(--red-soft); color:var(--red); border:1px solid #f2c9c6; }
+  button.btn.small{ padding:6px 12px; font-size:12px; border-radius:7px; }
+  button.btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; margin-top:14px;}
+  th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); padding:8px 10px; border-bottom:2px solid var(--line);}
+  td{ padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr:hover td{ background:#f7f9fb; }
+  .mono{ font-family:var(--mono); }
+  .tag{ display:inline-block; font-size:11px; font-weight:700; padding:3px 8px; border-radius:20px; }
+  .tag.ok{ background:var(--teal-soft); color:var(--teal); }
+  .tag.late{ background:var(--amber-soft); color:var(--amber); }
+  .tag.absent{ background:var(--red-soft); color:var(--red); }
+  .tag.neutral{ background:#eef1f4; color:var(--ink-soft); }
+
+  .mapping-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin:16px 0; }
+  .hint{ background:#f4f7fa; border:1px dashed var(--line); border-radius:10px; padding:12px 14px; font-size:12.5px; color:var(--ink-soft); line-height:1.5; }
+  .checkrow{ display:flex; gap:16px; flex-wrap:wrap; margin-top:6px;}
+  .checkrow label{ display:flex; align-items:center; gap:6px; font-size:13px; }
+
+  .empty{ text-align:center; padding:40px 20px; color:var(--ink-soft); }
+  .empty svg{ margin-bottom:10px; opacity:.5; }
+
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:18px;}
+  .stat{ background:#f7f9fb; border:1px solid var(--line); border-radius:10px; padding:14px 16px;}
+  .stat .n{ font-family:var(--mono); font-size:22px; font-weight:600; color:var(--navy);}
+  .stat .l{ font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+
+  .toast{ position:fixed; bottom:22px; right:22px; background:var(--navy); color:#fff; padding:12px 18px; border-radius:10px; font-size:13.5px; box-shadow:0 8px 24px rgba(0,0,0,.2); opacity:0; transform:translateY(10px); transition:.25s; pointer-events:none; z-index:50;}
+  .toast.show{ opacity:1; transform:translateY(0); }
+
+  footer.foot{ text-align:center; color:var(--ink-soft); font-size:11.5px; margin-top:26px; }
+
+  /* avatar / employee card */
+  .avatar{ width:38px; height:38px; border-radius:50%; object-fit:cover; background:#dfe6ee; display:inline-block; vertical-align:middle; }
+  .avatar-lg{ width:76px; height:76px; border-radius:50%; object-fit:cover; background:#dfe6ee; border:1px solid var(--line); }
+  .avatar-placeholder{ display:flex; align-items:center; justify-content:center; color:var(--ink-soft); font-family:var(--display); font-weight:600; }
+  .photo-picker{ display:flex; align-items:center; gap:14px; }
+  .form-card{ background:#f7f9fb; border:1px solid var(--line); border-radius:12px; padding:18px; margin-top:10px;}
+
+  /* calendar */
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:14px; }
+  .cal-dow{ font-size:11px; font-weight:700; text-transform:uppercase; color:var(--ink-soft); text-align:center; padding-bottom:4px;}
+  .cal-cell{ border:1px solid var(--line); border-radius:9px; padding:8px; min-height:76px; background:#fbfcfd; }
+  .cal-cell.muted{ background:transparent; border-color:transparent; }
+  .cal-cell .d{ font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:6px; }
+  .cal-cell .hrs{ font-family:var(--mono); font-size:12px; color:var(--ink); }
+  .cal-cell.ok{ background:var(--teal-soft); border-color:#c7e6d8; }
+  .cal-cell.late{ background:var(--amber-soft); border-color:#f0dcb2; }
+  .cal-cell.absent{ background:var(--red-soft); border-color:#f2c9c6; }
+
+  .subtabs{ display:flex; gap:8px; margin-bottom:6px; }
+  .subtabs button{ font-family:var(--body); font-weight:600; font-size:12.5px; color:var(--ink-soft); background:#f4f7fa; border:1px solid var(--line); padding:7px 13px; border-radius:8px; cursor:pointer; }
+  .subtabs button.active{ background:var(--navy); border-color:var(--navy); color:#fff; }
+  .subpanel{ display:none; }
+  .subpanel.active{ display:block; }
 </style>
 </head>
 <body>
-<div id="app">
-  <h1>Control Financiero - Iglesia Rosal 2026</h1>
+<div class="wrap">
 
-  <div class="kpis">
-    <div class="kpi"><p>Saldo actual (MXN)</p><p id="kpi-saldo">$0</p></div>
-    <div class="kpi"><p>Ingresos 2026</p><p id="kpi-ing" style="color:var(--success)">$0</p></div>
-    <div class="kpi"><p>Gastos 2026</p><p id="kpi-gas" style="color:var(--danger)">$0</p></div>
-    <div class="kpi warn"><p>Por revisar</p><p id="kpi-revisar">0</p></div>
-  </div>
-
-  <div class="card">
-    <p class="title">Registrar movimiento</p>
-    <div class="grid">
-      <div><label>Fecha</label><input type="date" id="f-fecha"></div>
-      <div><label>Tipo</label><select id="f-tipo"><option value="I">Ingreso</option><option value="G">Gasto</option></select></div>
-      <div><label>Moneda</label><select id="f-moneda"><option value="MXN">MXN</option><option value="USD">USD</option></select></div>
-      <div><label>Monto</label><input type="number" id="f-monto" step="0.01" placeholder="0.00"></div>
+  <div class="card-header">
+    <div class="title">
+      <h1>Control de Asistencia</h1>
+      <p>Compatible con exportaciones del checador BM160 · empleados, horarios y reportes</p>
     </div>
-    <div class="grid" style="margin-top:10px">
-      <div><label>Categoría</label><select id="f-cat"></select></div>
-      <div style="grid-column: span 2"><label>Descripción</label><input type="text" id="f-desc" placeholder="Ej. Ofrenda dominical, pago de luz..."></div>
+    <div class="clock" id="liveClock">--:--:--</div>
+  </div>
+
+  <nav class="tabs">
+    <button data-tab="import" class="active">Importar checadas</button>
+    <button data-tab="employees">Empleados</button>
+    <button data-tab="shifts">Turnos y códigos</button>
+    <button data-tab="config">Configuración</button>
+    <button data-tab="week">Resumen por periodo</button>
+    <button data-tab="calendar">Calendario</button>
+    <button data-tab="report">Reporte por empleado</button>
+  </nav>
+
+  <!-- IMPORT -->
+  <section class="panel active" id="panel-import">
+    <h2>Importar archivo del checador</h2>
+    <p class="sub">Sube el archivo que exporta el software del BM160 (.xlsx, .xls o .csv). Puede tener cualquier orden de columnas: solo indica cuál es cuál abajo.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Archivo exportado</label>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+      </div>
+      <button class="btn secondary" id="btnClearAll">Borrar todos los datos guardados</button>
     </div>
-    <button id="btn-add">Agregar movimiento</button>
-    <p id="err"></p>
-  </div>
 
-  <div class="filtros">
-    <button class="filtro-btn active" data-f="todos">Todos</button>
-    <button class="filtro-btn" data-f="Ingreso">Ingresos</button>
-    <button class="filtro-btn" data-f="Gasto">Gastos</button>
-    <button class="filtro-btn" data-f="revisar" style="border-color:var(--warning-text);color:var(--warning-text)">Por revisar</button>
-    <input type="text" id="buscar" placeholder="Buscar por descripción...">
-  </div>
+    <div id="mappingArea" style="display:none; margin-top:20px;">
+      <div class="hint">Se detectaron <b id="rowCount">0</b> filas. Selecciona qué columna corresponde a cada dato. Si fecha y hora vienen juntas en una sola columna, marca la casilla y elige solo esa columna.</div>
 
-  <p id="conteo"></p>
-  <div id="lista"></div>
+      <label class="checkrow" style="margin-top:14px;">
+        <input type="checkbox" id="combinedToggle"> Fecha y hora están en la misma columna
+      </label>
 
-  <div class="card">
-    <p class="title">Gastos por categoría (MXN)</p>
-    <div style="position:relative;width:100%;height:320px">
-      <canvas id="chart" role="img" aria-label="Gráfica de barras de gastos por categoría en pesos mexicanos"></canvas>
+      <div class="mapping-grid" style="margin-top:12px;">
+        <div class="field">
+          <label>ID / No. de empleado</label>
+          <select id="mapId"></select>
+        </div>
+        <div class="field">
+          <label>Nombre del empleado</label>
+          <select id="mapNombre"></select>
+        </div>
+        <div class="field" id="mapFechaWrap">
+          <label>Fecha</label>
+          <select id="mapFecha"></select>
+        </div>
+        <div class="field" id="mapHoraWrap">
+          <label>Hora</label>
+          <select id="mapHora"></select>
+        </div>
+        <div class="field" id="mapCombinedWrap" style="display:none;">
+          <label>Fecha y hora (columna única)</label>
+          <select id="mapCombined"></select>
+        </div>
+      </div>
+
+      <table id="previewTable"><thead></thead><tbody></tbody></table>
+
+      <div class="row" style="margin-top:16px;">
+        <button class="btn" id="btnProcess">Procesar y guardar checadas</button>
+        <span class="sub" id="processMsg" style="margin:0;"></span>
+      </div>
     </div>
-  </div>
-</div>
+  </section>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-const TIPO_CAMBIO = 18.5;
-const CATS_ING = ["Ofrenda Dominical","Ofrenda de Acción de Gracias","Ofrenda Especial","Ayuda para Enfermos","Pago Casa Móvil","Donativo Especial","Otros Ingresos"];
-const CATS_GAS = ["Gas / Calefacción","Mantenimiento Iglesia / Oficina","Limpieza de Iglesia","Luz / Electricidad","Agua","Teléfono / Internet","Seguro contra Incendio","Mantenimiento Casa Pastoral","Mantenimiento Auto Pastoral","Sueldo Pastor","Seguro Médico Pastor","Estudio y Libros Pastor","Mantenimiento Patio / Escuela","Trompetas / Banda","Evangelistas y Viajes","Comida Festiva y Flores","Comida Jóvenes","Emprendimientos Jóvenes","Escuela Bíblica Vacacional","Material Escuela Dominical","Ayuda Social / Armenkasse","Insumos de Cocina","Gimnasio","Cuotas / Comisiones Bancarias","Construcción de Iglesia","Imprevistos","Tesorero","Reparaciones Vehículo Iglesia","Otros Gastos"];
+  <!-- EMPLOYEES -->
+  <section class="panel" id="panel-employees">
+    <h2>Directorio de empleados</h2>
+    <p class="sub">Registra los datos de cada empleado. El <b>número de empleado</b> debe coincidir con el ID que usa el checador para poder cruzar las checadas.</p>
 
-const SEED = [["2025-04-13", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 220.0], ["2026-01-01", "G", "Trompetas / Banda", "Abram Wall Posaunen", "USD", 960.0], ["2026-01-03", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-01-03", "G", "Mantenimiento Auto Pastoral", "Hans Klassen Apoyo Gasolina", "MXN", 2000.0], ["2026-01-06", "G", "Otros Gastos", "Pancho Thiessen Cena Año Nuevo", "MXN", 5480.0], ["2026-01-11", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10400.0], ["2026-01-11", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 436.0], ["2026-01-14", "G", "Otros Gastos", "Lisa Bergen Donas", "MXN", 750.0], ["2026-01-17", "G", "Otros Gastos", "Jovanny", "MXN", 11666.41], ["2026-01-18", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 12600.0], ["2026-01-18", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 130.0], ["2026-01-24", "G", "Insumos de Cocina", "lisa Bergen GYM Kuchen Sachen", "MXN", 6400.0], ["2026-01-25", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9900.0], ["2026-01-25", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 170.0], ["2026-01-28", "G", "Insumos de Cocina", "Gr Super Market", "MXN", 2300.0], ["2026-02-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 16300.0], ["2026-02-01", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-02-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 20.0], ["2026-02-02", "G", "Mantenimiento Iglesia / Oficina", "Renta de Tigeras", "MXN", 1600.0], ["2026-02-02", "G", "Reparaciones Vehículo Iglesia", "Reparacion Vehiculo Iglecia", "MXN", 4000.0], ["2026-02-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9900.0], ["2026-02-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 100.0], ["2026-02-14", "G", "Limpieza de Iglesia", "Anna Friessen Kirche Säbern", "MXN", 13647.0], ["2026-02-15", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8550.0], ["2026-02-15", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 10.0], ["2026-02-20", "G", "Otros Gastos", "recuadacion de rentas", "MXN", 488.0], ["2026-02-20", "G", "Ayuda Social / Armenkasse", "Ana Wolf Rame Hilfen", "MXN", 5000.0], ["2026-02-20", "G", "Otros Gastos", "Eva Peters", "MXN", 11725.96], ["2026-02-21", "G", "Gas / Calefacción", "Gas 19 Para la Iglecia", "MXN", 8923.0], ["2026-02-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 13800.0], ["2026-02-22", "G", "Otros Gastos", "Johan Reimer Boletos Pastor", "USD", 920.0], ["2026-03-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 11520.0], ["2026-03-01", "G", "Comida Jóvenes", "PAULINA Froesse Jugend essen", "MXN", 13958.0], ["2026-03-01", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 115.0], ["2026-03-04", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 53000.0], ["2026-03-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10200.0], ["2026-03-08", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 45.0], ["2026-03-11", "G", "Otros Gastos", "isaak Wall Reparacion", "MXN", 5917.42], ["2026-03-14", "G", "Otros Gastos", "Greta Klassen", "MXN", 1235.0], ["2026-03-19", "G", "Otros Gastos", "Eva Peters", "MXN", 11867.14], ["2026-03-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 19690.0], ["2026-03-22", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 95.0], ["2026-03-29", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 13000.0], ["2026-03-29", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 60.0], ["2026-04-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 6550.0], ["2026-04-05", "G", "Sueldo Pastor", "Prediger Lohn", "MXN", 53000.0], ["2026-04-05", "G", "Otros Gastos", "Pancho thiessen Reparacion", "USD", 200.0], ["2026-04-12", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10500.0], ["2026-04-16", "G", "Otros Gastos", "Eva Peters", "MXN", 12272.4], ["2026-04-19", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 7730.0], ["2026-04-19", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 50.0], ["2026-04-22", "G", "Otros Gastos", "Susa Neufeld copra de melodias", "MXN", 3200.0], ["2026-04-26", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 7000.0], ["2026-04-26", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 135.0], ["2026-04-27", "G", "Mantenimiento Iglesia / Oficina", "Compra Papel Hihenico", "MXN", 877.0], ["2026-04-30", "G", "Otros Gastos", "Anna Wolf Compra de tortillas", "MXN", 800.0], ["2026-05-02", "G", "Otros Gastos", "Delfina Froesse   Bibel Schule", "MXN", 3560.0], ["2026-05-02", "G", "Comida Jóvenes", "delfina Froesse   Jugend  Essen", "MXN", 4280.0], ["2026-05-03", "G", "Sueldo Pastor", "Prediger Lohn", "MXN", 53000.0], ["2026-05-03", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 10.0], ["2026-05-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 9500.0], ["2026-05-07", "G", "Otros Gastos", "Greta Klassen", "MXN", 975.0], ["2026-05-08", "G", "Limpieza de Iglesia", "Anna Friessen Kirche Saubern", "MXN", 13140.0], ["2026-05-08", "G", "Insumos de Cocina", "Super Market", "MXN", 7128.41], ["2026-05-09", "G", "Otros Gastos", "reparacion frenos", "MXN", 1599.16], ["2026-05-10", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 4700.0], ["2026-05-10", "G", "Otros Gastos", "Kinderheim la junta", "MXN", 41000.0], ["2026-05-10", "G", "Otros Gastos", "Blunem Mutters Tag", "MXN", 2500.0], ["2026-05-10", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 120.0], ["2026-05-13", "G", "Otros Gastos", "Linda Friessen", "MXN", 389.0], ["2026-05-13", "G", "Otros Gastos", "Linda Friessen", "MXN", 4240.0], ["2026-05-14", "G", "Insumos de Cocina", "Super Market", "MXN", 258.0], ["2026-05-16", "G", "Otros Gastos", "reparacion frenos", "MXN", 360.0], ["2026-05-16", "G", "Otros Gastos", "Hans Klassen", "MXN", 3000.0], ["2026-05-16", "G", "Insumos de Cocina", "Super Market", "MXN", 7816.02], ["2026-05-16", "G", "Insumos de Cocina", "Super Market", "MXN", 9588.66], ["2026-05-16", "G", "Otros Gastos", "Sara Froessen Frauen Desayuno", "MXN", 1084.0], ["2026-05-17", "G", "Otros Gastos", "Anna Wolf Familien Tag", "MXN", 925.0], ["2026-05-20", "G", "Otros Gastos", "Greta Klassen", "MXN", 1749.0], ["2026-05-22", "G", "Otros Gastos", "Hans Klassen", "MXN", 15000.0], ["2026-05-24", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8040.0], ["2026-05-24", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 220.0], ["2026-05-29", "G", "Escuela Bíblica Vacacional", "Paulina Froesse Bible Schule", "MXN", 7000.0], ["2026-05-29", "G", "Comida Jóvenes", "Paulina Froesse Jugend Essen", "MXN", 13587.0], ["2026-05-31", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10400.0], ["2026-06-01", "G", "Sueldo Pastor", "Hans Klassen Preiger Lohn", "MXN", 48000.0], ["2026-06-01", "G", "Mantenimiento Iglesia / Oficina", "Compra de papel para baños", "MXN", 681.9], ["2026-06-07", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 17600.0], ["2026-06-07", "G", "Comida Jóvenes", "Corny Froesse  Jugend Essen", "MXN", 3500.0], ["2026-06-07", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 240.0], ["2026-06-09", "G", "Otros Gastos", "Escuela La Esperanza", "MXN", 46320.0], ["2026-06-11", "G", "Limpieza de Iglesia", "Anna Friessen Kieche Säubern", "MXN", 10680.0], ["2026-06-12", "G", "Mantenimiento Casa Pastoral", "Hans Klassen Prediger Haus", "MXN", 1234.0], ["2026-06-14", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 8900.0], ["2026-06-15", "G", "Comida Jóvenes", "Lisa Penner MiniJugend Essen", "MXN", 1787.0], ["2026-06-16", "G", "Seguro contra Incendio", "General Seguros", "MXN", 2478.0], ["2026-06-20", "G", "Comida Jóvenes", "Hans Klassen Jugend Essen", "MXN", 626.0], ["2026-06-20", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 10000.0], ["2026-06-20", "G", "Otros Gastos", "Radiobotchaften", "USD", 1197.0], ["2026-06-21", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 10520.0], ["2026-06-21", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 330.0], ["2026-06-23", "G", "Otros Gastos", "Jugend <<reise Ruidoso", "USD", 1500.0], ["2026-06-26", "G", "Otros Gastos", "Greta Klassen Ferien BibleSchule", "MXN", 512.0], ["2026-06-26", "G", "Insumos de Cocina", "Gr Super Ferien Bibelschule", "MXN", 5072.86], ["2026-06-26", "G", "Gas / Calefacción", "Gas Ferien Bibelschle", "MXN", 1615.22], ["2026-06-27", "G", "Comida Jóvenes", "Delfina Jugend essen", "MXN", 2602.0], ["2026-06-27", "G", "Gas / Calefacción", "Greta Klassen Gas Ferien BibleSchule", "MXN", 1500.0], ["2026-06-27", "G", "Otros Gastos", "Delfina Jugend ferien bilbel", "MXN", 635.0], ["2026-06-28", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 15200.0], ["2026-06-28", "G", "Otros Gastos", "Niel Enns Reparacion Iglecia", "MXN", 4000.0], ["2026-06-28", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 120.0], ["2026-07-03", "G", "Gas / Calefacción", "Lisa Bergen Gas Ferien Bible", "MXN", 2450.0], ["2026-07-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "MXN", 32700.0], ["2026-07-05", "G", "Sueldo Pastor", "Hans Klassen Prediger Lohn", "MXN", 38000.0], ["2026-07-05", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 60.0], ["2026-07-14", "I", "Ofrenda Dominical", "Sonntäglicheopfer", "USD", 70.0]]
-;
-
-let items = [];
-let chart;
-let filtro = 'todos';
-const KEY = 'iglesia-movimientos-v1';
-
-function fmt(n){ return '$' + Math.round(n).toLocaleString('es-MX'); }
-function toMXN(item){ return item.moneda === 'USD' ? item.monto * TIPO_CAMBIO : item.monto; }
-
-function populateCat(sel, tipo){
-  const list = tipo === 'I' ? CATS_ING : CATS_GAS;
-  sel.innerHTML = list.map(c => `<option value="${c}">${c}</option>`).join('');
-}
-
-document.getElementById('f-tipo').addEventListener('change', e=>{
-  populateCat(document.getElementById('f-cat'), e.target.value);
-});
-populateCat(document.getElementById('f-cat'), 'I');
-document.getElementById('f-fecha').valueAsDate = new Date();
-
-document.querySelectorAll('.filtro-btn').forEach(b=>{
-  b.addEventListener('click', ()=>{
-    document.querySelectorAll('.filtro-btn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    filtro = b.dataset.f; render();
-  });
-});
-document.getElementById('buscar').addEventListener('input', render);
-
-function render(){
-  const saldo = items.reduce((s,i)=> s + (i.tipo==='I' ? toMXN(i) : -toMXN(i)), 0);
-  document.getElementById('kpi-saldo').textContent = fmt(saldo);
-  document.getElementById('kpi-ing').textContent = fmt(items.filter(i=>i.tipo==='I').reduce((s,i)=>s+toMXN(i),0));
-  document.getElementById('kpi-gas').textContent = fmt(items.filter(i=>i.tipo==='G').reduce((s,i)=>s+toMXN(i),0));
-  document.getElementById('kpi-revisar').textContent = items.filter(i=>i.cat==='Otros Gastos').length;
-
-  const q = document.getElementById('buscar').value.toLowerCase();
-  let filtered = items.filter(i=>{
-    if(filtro==='Ingreso' && i.tipo!=='I') return false;
-    if(filtro==='Gasto' && i.tipo!=='G') return false;
-    if(filtro==='revisar' && i.cat!=='Otros Gastos') return false;
-    if(q && !(i.desc.toLowerCase().includes(q) || i.cat.toLowerCase().includes(q))) return false;
-    return true;
-  });
-  filtered.sort((a,b)=> new Date(b.fecha)-new Date(a.fecha));
-  document.getElementById('conteo').textContent = filtered.length + ' movimiento(s)';
-
-  const lista = document.getElementById('lista');
-  if(filtered.length===0){
-    lista.innerHTML = '<p style="padding:16px;color:var(--text-muted);font-size:14px;margin:0">No hay movimientos con este filtro.</p>';
-  } else {
-    lista.innerHTML = filtered.map(i=>{
-      const catList = i.tipo==='I' ? CATS_ING : CATS_GAS;
-      const opts = catList.map(c=>`<option value="${c}" ${c===i.cat?'selected':''}>${c}</option>`).join('');
-      const needsReview = i.cat==='Otros Gastos';
-      return `
-      <div class="row ${needsReview?'warn':''}">
-        <div style="flex:1;min-width:0">
-          <p class="desc">${i.desc}</p>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
-            <select data-id="${i.id}" class="cat-select">${opts}</select>
-            <span class="fecha">${new Date(i.fecha).toLocaleDateString('es-MX')}</span>
+    <div class="form-card">
+      <input type="hidden" id="empEditingKey" value="">
+      <div class="row">
+        <div class="field" style="min-width:220px;">
+          <label>Nombre completo</label>
+          <input type="text" id="empNombre" placeholder="Ej. María Fernanda López Ruiz">
+        </div>
+        <div class="field">
+          <label>Número de empleado (ID checador)</label>
+          <input type="text" id="empId" placeholder="Ej. 014">
+        </div>
+        <div class="field">
+          <label>Fecha de contratación</label>
+          <input type="date" id="empFecha">
+        </div>
+        <div class="field">
+          <label>Departamento</label>
+          <input type="text" id="empDepto" placeholder="Ej. Producción">
+        </div>
+        <div class="field">
+          <label>Sueldo por hora</label>
+          <input type="number" id="empSueldo" placeholder="Ej. 45.50" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label>Turno asignado</label>
+          <select id="empTurno"><option value="">-- sin turno específico --</option></select>
+        </div>
+        <div class="field">
+          <label>Código de pago</label>
+          <select id="empCodigo"><option value="">-- sin código --</option></select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div class="field">
+          <label>Foto</label>
+          <div class="photo-picker">
+            <img id="empFotoPreview" class="avatar-lg" style="display:none;">
+            <div id="empFotoPlaceholder" class="avatar-lg avatar-placeholder">S/F</div>
+            <input type="file" id="empFotoInput" accept="image/*">
           </div>
         </div>
-        <p class="monto ${i.tipo==='I'?'pos':'neg'}">
-          ${i.tipo==='I' ? '+' : '-'}${i.moneda==='USD' ? '$'+i.monto.toFixed(2)+' USD' : fmt(i.monto)}
-        </p>
-      </div>`;
-    }).join('');
-    lista.querySelectorAll('.cat-select').forEach(sel=>{
-      sel.addEventListener('change', e=>{
-        const id = e.target.dataset.id;
-        const it = items.find(x=>x.id===id);
-        if(it){ it.cat = e.target.value; save(); render(); }
-      });
-    });
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn" id="btnSaveEmployee">Agregar empleado</button>
+        <button class="btn secondary" id="btnCancelEditEmployee" style="display:none;">Cancelar edición</button>
+        <span class="sub" id="empMsg" style="margin:0;"></span>
+      </div>
+    </div>
+
+    <div id="employeesTableArea"></div>
+  </section>
+
+  <!-- SHIFTS + PAY CODES -->
+  <section class="panel" id="panel-shifts">
+    <h2>Turnos y códigos de pago</h2>
+    <p class="sub">Define los horarios de turno y los códigos de pago que puedes asignar a cada empleado.</p>
+
+    <div class="subtabs">
+      <button data-sub="turnos" class="active">Turnos</button>
+      <button data-sub="codigos">Códigos de pago</button>
+    </div>
+
+    <div class="subpanel active" id="sub-turnos">
+      <div class="form-card">
+        <div class="row">
+          <div class="field"><label>Nombre del turno</label><input type="text" id="turNombre" placeholder="Ej. Matutino"></div>
+          <div class="field"><label>Hora de entrada</label><input type="time" id="turEntrada" value="08:00"></div>
+          <div class="field"><label>Hora de salida</label><input type="time" id="turSalida" value="17:00"></div>
+          <div class="field"><label>Tolerancia (min)</label><input type="number" id="turTolerancia" value="10" min="0"></div>
+          <button class="btn" id="btnAddTurno">Agregar turno</button>
+        </div>
+      </div>
+      <div id="turnosTableArea"></div>
+    </div>
+
+    <div class="subpanel" id="sub-codigos">
+      <div class="form-card">
+        <div class="row">
+          <div class="field"><label>Clave</label><input type="text" id="codClave" placeholder="Ej. N"></div>
+          <div class="field" style="min-width:260px;"><label>Nombre / descripción</label><input type="text" id="codNombre" placeholder="Ej. Sueldo normal"></div>
+          <button class="btn" id="btnAddCodigo">Agregar código</button>
+        </div>
+      </div>
+      <div id="codigosTableArea"></div>
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section class="panel" id="panel-config">
+    <h2>Configuración general de horario</h2>
+    <p class="sub">Se usa como valor por default para retardos y faltas cuando un empleado no tiene un turno específico asignado.</p>
+    <div class="row">
+      <div class="field">
+        <label>Hora de entrada esperada</label>
+        <input type="time" id="cfgEntrada" value="08:00">
+      </div>
+      <div class="field">
+        <label>Tolerancia (minutos)</label>
+        <input type="number" id="cfgTolerancia" value="10" min="0">
+      </div>
+      <div class="field">
+        <label>Horas de jornada esperadas por día</label>
+        <input type="number" id="cfgJornada" value="8" min="0" step="0.5">
+      </div>
+      <div class="field">
+        <label>Multiplicador de hora extra</label>
+        <input type="number" id="cfgMultiplicador" value="2" min="1" step="0.1">
+      </div>
+    </div>
+    <div class="hint" style="margin-top:14px;">Cualquier hora trabajada en un día por arriba de la jornada esperada se paga como hora extra, multiplicando el sueldo por hora por este factor (ej. 2 = doble).</div>
+    <div style="margin-top:18px;">
+      <label style="font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase;">Días laborables (default)</label>
+      <div class="checkrow" id="cfgDias">
+        <label><input type="checkbox" value="1" checked> Lunes</label>
+        <label><input type="checkbox" value="2" checked> Martes</label>
+        <label><input type="checkbox" value="3" checked> Miércoles</label>
+        <label><input type="checkbox" value="4" checked> Jueves</label>
+        <label><input type="checkbox" value="5" checked> Viernes</label>
+        <label><input type="checkbox" value="6"> Sábado</label>
+        <label><input type="checkbox" value="0"> Domingo</label>
+      </div>
+    </div>
+    <div class="row" style="margin-top:20px;">
+      <button class="btn" id="btnSaveConfig">Guardar configuración</button>
+      <span class="sub" id="configMsg" style="margin:0;"></span>
+    </div>
+  </section>
+
+  <!-- WEEK / PERIOD SUMMARY -->
+  <section class="panel" id="panel-week">
+    <h2>Resumen por periodo</h2>
+    <p class="sub">Elige cualquier rango de fechas y ve un solo empleado o todos a la vez. Suma automáticamente todas las checadas del día (aunque haya 6) en pares entrada/salida.</p>
+    <div class="row">
+      <div class="field">
+        <label>Empleado</label>
+        <select id="weekEmpleado"><option value="__all__">Todos los empleados</option></select>
+      </div>
+      <div class="field">
+        <label>Desde</label>
+        <input type="date" id="weekDesde">
+      </div>
+      <div class="field">
+        <label>Hasta</label>
+        <input type="date" id="weekHasta">
+      </div>
+      <button class="btn" id="btnLoadWeek">Ver resumen</button>
+      <button class="btn secondary" id="btnQuickWeek">Semana actual</button>
+    </div>
+    <div id="weekArea"></div>
+  </section>
+
+  <!-- CALENDAR -->
+  <section class="panel" id="panel-calendar">
+    <h2>Calendario de asistencia</h2>
+    <p class="sub">Vista mensual de un empleado: verde a tiempo, ámbar retardo, rojo falta.</p>
+    <div class="row">
+      <div class="field">
+        <label>Empleado</label>
+        <select id="calEmpleado"></select>
+      </div>
+      <div class="field">
+        <label>Mes</label>
+        <input type="month" id="calMonth">
+      </div>
+      <button class="btn secondary" id="btnCalPrev">◀ mes anterior</button>
+      <button class="btn secondary" id="btnCalNext">mes siguiente ▶</button>
+    </div>
+    <div id="calendarArea"></div>
+  </section>
+
+  <!-- REPORT -->
+  <section class="panel" id="panel-report">
+    <h2>Reporte por empleado</h2>
+    <p class="sub">Elige empleado y rango de fechas para ver horas trabajadas, retardos y faltas día por día.</p>
+    <div class="row">
+      <div class="field">
+        <label>Empleado</label>
+        <select id="repEmpleado"></select>
+      </div>
+      <div class="field">
+        <label>Desde</label>
+        <input type="date" id="repDesde">
+      </div>
+      <div class="field">
+        <label>Hasta</label>
+        <input type="date" id="repHasta">
+      </div>
+      <button class="btn" id="btnGenReport">Generar reporte</button>
+      <button class="btn secondary" id="btnExportReport" disabled>Exportar a Excel</button>
+    </div>
+    <div id="reportArea"></div>
+  </section>
+
+  <footer class="foot">Los datos (incluidas fotos) se guardan solo en tu navegador (almacenamiento del artefacto), no se comparten con nadie.</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- estado ---------- */
+let PUNCHES = [];
+let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, dias:[1,2,3,4,5] };
+let EMPLOYEES = [];   // {id, nombre, fecha, depto, turnoId, codigoId, foto}
+let TURNOS = [];      // {id, nombre, entrada, salida, tolerancia}
+let CODIGOS = [];     // {id, clave, nombre}
+let PARSED_ROWS = [];
+let HEADERS = [];
+
+/* ---------- utilidades ---------- */
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function pad(n){ return String(n).padStart(2,'0'); }
+function fmtHM(mins){
+  const sign = mins<0 ? '-' : '';
+  mins = Math.abs(Math.round(mins));
+  const h = Math.floor(mins/60), m = mins%60;
+  return `${sign}${h}h ${pad(m)}m`;
+}
+function isoDate(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+function excelSerialToDate(serial){
+  const utc_days = Math.floor(serial - 25569);
+  const utc_value = utc_days*86400;
+  const date = new Date(utc_value*1000);
+  const fractional_day = serial - Math.floor(serial) + 1e-7;
+  let totalSeconds = Math.floor(86400*fractional_day);
+  const seconds = totalSeconds % 60; totalSeconds -= seconds;
+  const hours = Math.floor(totalSeconds/3600);
+  const minutes = Math.floor(totalSeconds/60)%60;
+  date.setHours(hours, minutes, seconds, 0);
+  return date;
+}
+function parseDatePart(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(v instanceof Date) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  if(typeof v === 'number'){
+    const d = excelSerialToDate(v);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
   }
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(m) return new Date(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})/);
+  if(m){ let yr=+m[3]; if(yr<100) yr+=2000; return new Date(yr, +m[2]-1, +m[1]); }
+  const d = new Date(s);
+  if(!isNaN(d)) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return null;
+}
+function parseTimePart(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(v instanceof Date) return {h:v.getHours(), m:v.getMinutes(), s:v.getSeconds()};
+  if(typeof v === 'number'){
+    const frac = v < 1 ? v : (v - Math.floor(v));
+    let totalSeconds = Math.round(86400*frac);
+    const s = totalSeconds % 60; totalSeconds -= s;
+    const h = Math.floor(totalSeconds/3600);
+    const m = Math.floor(totalSeconds/60)%60;
+    return {h,m,s};
+  }
+  const str = String(v).trim();
+  let m = str.match(/(\d{1,2}):(\d{2})(:(\d{2}))?\s*(AM|PM|am|pm)?/);
+  if(m){
+    let h=+m[1]; const min=+m[2]; const sec=m[4]?+m[4]:0;
+    const ap = m[5] ? m[5].toUpperCase() : null;
+    if(ap==='PM' && h<12) h+=12;
+    if(ap==='AM' && h===12) h=0;
+    return {h,m:min,s:sec};
+  }
+  return null;
+}
+function combineDateTime(dateVal, timeVal){
+  let datePart = parseDatePart(dateVal);
+  let timePart = parseTimePart(timeVal);
+  if(!datePart && dateVal instanceof Date){ datePart = new Date(dateVal.getFullYear(),dateVal.getMonth(),dateVal.getDate()); }
+  if(!timePart && timeVal===undefined){ timePart = parseTimePart(dateVal); }
+  if(!datePart) return null;
+  if(!timePart) timePart = {h:0,m:0,s:0};
+  return new Date(datePart.getFullYear(), datePart.getMonth(), datePart.getDate(), timePart.h, timePart.m, timePart.s);
+}
+function parseCombined(v){
+  if(v instanceof Date) return v;
+  if(typeof v === 'number') return excelSerialToDate(v);
+  const s = String(v).trim();
+  let d = combineDateTime(s, undefined);
+  if(d) return d;
+  d = new Date(s.replace(' ', 'T'));
+  if(!isNaN(d)) return d;
+  return null;
+}
 
-  const gastos = items.filter(i=>i.tipo==='G');
-  const byCat = {};
-  gastos.forEach(i=>{ byCat[i.cat] = (byCat[i.cat]||0) + toMXN(i); });
-  const labels = Object.keys(byCat).sort((a,b)=>byCat[b]-byCat[a]).slice(0,8);
-  const data = labels.map(l=>Math.round(byCat[l]));
+/* ---------- storage ---------- */
+async function saveStorage(){
+  try{
+    await window.storage.set('bm160-punches', JSON.stringify(PUNCHES), false);
+    await window.storage.set('bm160-config', JSON.stringify(CONFIG), false);
+    await window.storage.set('bm160-employees', JSON.stringify(EMPLOYEES), false);
+    await window.storage.set('bm160-turnos', JSON.stringify(TURNOS), false);
+    await window.storage.set('bm160-codigos', JSON.stringify(CODIGOS), false);
+  }catch(e){ console.error('storage error', e); }
+}
+async function loadStorage(){
+  try{ const p = await window.storage.get('bm160-punches', false); if(p&&p.value) PUNCHES = JSON.parse(p.value); }catch(e){ PUNCHES=[]; }
+  try{ const c = await window.storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
+  try{ const e2 = await window.storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
+  try{ const t = await window.storage.get('bm160-turnos', false); if(t&&t.value) TURNOS = JSON.parse(t.value); }catch(e){ TURNOS=[]; }
+  try{ const cod = await window.storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
+  applyConfigToForm();
+  renderEmployeesTable();
+  renderTurnosTable();
+  renderCodigosTable();
+  refreshAllEmployeeSelects();
+  const now = new Date();
+  document.getElementById('calMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+}
+function applyConfigToForm(){
+  document.getElementById('cfgEntrada').value = CONFIG.entrada;
+  document.getElementById('cfgTolerancia').value = CONFIG.tolerancia;
+  document.getElementById('cfgJornada').value = CONFIG.jornada;
+  document.getElementById('cfgMultiplicador').value = CONFIG.multiplicador || 2;
+  document.querySelectorAll('#cfgDias input[type=checkbox]').forEach(cb=>{ cb.checked = CONFIG.dias.includes(+cb.value); });
+}
 
-  if(chart) chart.destroy();
-  chart = new Chart(document.getElementById('chart'), {
-    type: 'bar',
-    data: { labels, datasets: [{ label: 'Gasto (MXN)', data, backgroundColor: '#2a78d6', borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+/* ---------- tabs ---------- */
+document.querySelectorAll('nav.tabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
   });
-}
-
-function save(){
-  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch(e) { console.error(e); }
-}
-function load(){
-  try {
-    const r = localStorage.getItem(KEY);
-    items = r ? JSON.parse(r) : null;
-  } catch(e) { items = null; }
-  if(!items){
-    items = SEED.map((t,idx)=>({id:'seed-'+idx, fecha:t[0], tipo:t[1], cat:t[2], desc:t[3], moneda:t[4], monto:t[5]}));
-    save();
-  }
-  render();
-}
-
-document.getElementById('btn-add').addEventListener('click', ()=>{
-  const fecha = document.getElementById('f-fecha').value;
-  const tipo = document.getElementById('f-tipo').value;
-  const moneda = document.getElementById('f-moneda').value;
-  const monto = parseFloat(document.getElementById('f-monto').value);
-  const cat = document.getElementById('f-cat').value;
-  const desc = document.getElementById('f-desc').value || cat;
-  const err = document.getElementById('err');
-  if(!fecha || !monto || monto<=0){
-    err.textContent = 'Ingresa una fecha y un monto válido.';
-    err.style.display = 'block';
-    return;
-  }
-  err.style.display = 'none';
-  items.push({id:'m-'+Date.now(), fecha, tipo, cat, desc, moneda, monto});
-  save();
-  document.getElementById('f-monto').value = '';
-  document.getElementById('f-desc').value = '';
-  render();
+});
+document.querySelectorAll('.subtabs button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.subtabs button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.subpanel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sub-'+btn.dataset.sub).classList.add('active');
+  });
 });
 
-load();
+setInterval(()=>{
+  const d = new Date();
+  document.getElementById('liveClock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}, 1000);
+
+/* ---------- import ---------- */
+document.getElementById('fileInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    let workbook;
+    try{
+      if(file.name.toLowerCase().endsWith('.csv')){
+        workbook = XLSX.read(evt.target.result, {type:'string', cellDates:true});
+      } else {
+        workbook = XLSX.read(evt.target.result, {type:'array', cellDates:true});
+      }
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {defval:'', raw:true});
+      if(!rows.length){ toast('El archivo no tiene filas legibles.'); return; }
+      PARSED_ROWS = rows;
+      HEADERS = Object.keys(rows[0]);
+      buildMappingUI();
+      toast('Archivo leído: ' + rows.length + ' filas.');
+    }catch(err){ console.error(err); toast('No se pudo leer el archivo. Revisa el formato.'); }
+  };
+  if(file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file);
+  else reader.readAsArrayBuffer(file);
+});
+function guessColumn(candidates){
+  const lower = HEADERS.map(h=>String(h).toLowerCase());
+  for(const cand of candidates){ const idx = lower.findIndex(h=>h.includes(cand)); if(idx>-1) return HEADERS[idx]; }
+  return '';
+}
+function buildMappingUI(){
+  document.getElementById('mappingArea').style.display = 'block';
+  document.getElementById('rowCount').textContent = PARSED_ROWS.length;
+  const selects = ['mapId','mapNombre','mapFecha','mapHora','mapCombined'];
+  selects.forEach(id=>{
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">-- selecciona --</option>' + HEADERS.map(h=>`<option value="${h}">${h}</option>`).join('');
+  });
+  document.getElementById('mapId').value = guessColumn(['id','pin','no.','no','número','numero','clave']);
+  document.getElementById('mapNombre').value = guessColumn(['nombre','name','empleado']);
+  document.getElementById('mapFecha').value = guessColumn(['fecha','date']);
+  document.getElementById('mapHora').value = guessColumn(['hora','time']);
+  document.getElementById('mapCombined').value = guessColumn(['fecha y hora','datetime','fecha/hora','check time','timestamp']);
+  renderPreview();
+}
+document.getElementById('combinedToggle').addEventListener('change', (e)=>{
+  const combined = e.target.checked;
+  document.getElementById('mapFechaWrap').style.display = combined ? 'none' : 'flex';
+  document.getElementById('mapHoraWrap').style.display = combined ? 'none' : 'flex';
+  document.getElementById('mapCombinedWrap').style.display = combined ? 'flex' : 'none';
+});
+function renderPreview(){
+  const thead = document.querySelector('#previewTable thead');
+  const tbody = document.querySelector('#previewTable tbody');
+  thead.innerHTML = '<tr>' + HEADERS.map(h=>`<th>${h}</th>`).join('') + '</tr>';
+  tbody.innerHTML = PARSED_ROWS.slice(0,5).map(r=>
+    '<tr>' + HEADERS.map(h=>`<td class="mono">${r[h] instanceof Date ? r[h].toLocaleString() : r[h]}</td>`).join('') + '</tr>'
+  ).join('');
+}
+document.getElementById('btnProcess').addEventListener('click', ()=>{
+  const combined = document.getElementById('combinedToggle').checked;
+  const colId = document.getElementById('mapId').value;
+  const colNombre = document.getElementById('mapNombre').value;
+  const colFecha = document.getElementById('mapFecha').value;
+  const colHora = document.getElementById('mapHora').value;
+  const colCombined = document.getElementById('mapCombined').value;
+  if(!colId || !colNombre || (combined ? !colCombined : (!colFecha || !colHora))){ toast('Falta seleccionar alguna columna.'); return; }
+  let added=0, skipped=0;
+  const newPunches = [];
+  for(const row of PARSED_ROWS){
+    const id = String(row[colId]).trim();
+    const nombre = String(row[colNombre]).trim();
+    if(!id || !nombre){ skipped++; continue; }
+    let dt = combined ? parseCombined(row[colCombined]) : combineDateTime(row[colFecha], row[colHora]);
+    if(!dt || isNaN(dt)){ skipped++; continue; }
+    newPunches.push({ id, nombre, fecha: isoDate(dt), hora: `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`, ts: dt.getTime() });
+    added++;
+  }
+  const key = p => `${p.id}|${p.ts}`;
+  const existingKeys = new Set(PUNCHES.map(key));
+  let mergedCount = 0;
+  for(const p of newPunches){ if(!existingKeys.has(key(p))){ PUNCHES.push(p); existingKeys.add(key(p)); mergedCount++; } }
+  PUNCHES.sort((a,b)=>a.ts-b.ts);
+  saveStorage();
+  refreshAllEmployeeSelects();
+  document.getElementById('processMsg').textContent = `Guardadas ${mergedCount} checadas nuevas (${skipped} filas omitidas por datos incompletos).`;
+  toast('Checadas procesadas y guardadas.');
+});
+document.getElementById('btnClearAll').addEventListener('click', async ()=>{
+  if(!confirm('¿Borrar TODOS los datos guardados (checadas, empleados, turnos y códigos)? Esta acción no se puede deshacer.')) return;
+  PUNCHES=[]; EMPLOYEES=[]; TURNOS=[]; CODIGOS=[];
+  try{
+    await window.storage.delete('bm160-punches', false);
+    await window.storage.delete('bm160-employees', false);
+    await window.storage.delete('bm160-turnos', false);
+    await window.storage.delete('bm160-codigos', false);
+  }catch(e){}
+  renderEmployeesTable(); renderTurnosTable(); renderCodigosTable(); refreshAllEmployeeSelects();
+  toast('Datos borrados.');
+});
+
+/* ---------- empleados ---------- */
+function resizePhoto(file, cb){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const maxDim = 200;
+      let w = img.width, h = img.height;
+      if(w>h){ if(w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; } }
+      else { if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; } }
+      const canvas = document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      cb(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+let PENDING_PHOTO = '';
+document.getElementById('empFotoInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  resizePhoto(file, (dataUrl)=>{
+    PENDING_PHOTO = dataUrl;
+    const img = document.getElementById('empFotoPreview');
+    img.src = dataUrl; img.style.display='inline-block';
+    document.getElementById('empFotoPlaceholder').style.display='none';
+  });
+});
+function refreshTurnoCodigoSelects(){
+  const tSel = document.getElementById('empTurno');
+  tSel.innerHTML = '<option value="">-- sin turno específico --</option>' + TURNOS.map(t=>`<option value="${t.id}">${t.nombre} (${t.entrada}-${t.salida})</option>`).join('');
+  const cSel = document.getElementById('empCodigo');
+  cSel.innerHTML = '<option value="">-- sin código --</option>' + CODIGOS.map(c=>`<option value="${c.id}">${c.clave} — ${c.nombre}</option>`).join('');
+}
+function resetEmployeeForm(){
+  document.getElementById('empEditingKey').value='';
+  document.getElementById('empNombre').value='';
+  document.getElementById('empId').value='';
+  document.getElementById('empFecha').value='';
+  document.getElementById('empDepto').value='';
+  document.getElementById('empSueldo').value='';
+  document.getElementById('empTurno').value='';
+  document.getElementById('empCodigo').value='';
+  document.getElementById('empFotoInput').value='';
+  document.getElementById('empFotoPreview').style.display='none';
+  document.getElementById('empFotoPlaceholder').style.display='flex';
+  PENDING_PHOTO='';
+  document.getElementById('btnSaveEmployee').textContent='Agregar empleado';
+  document.getElementById('btnCancelEditEmployee').style.display='none';
+}
+document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
+  const nombre = document.getElementById('empNombre').value.trim();
+  const id = document.getElementById('empId').value.trim();
+  if(!nombre || !id){ toast('Nombre y número de empleado son obligatorios.'); return; }
+  const editingKey = document.getElementById('empEditingKey').value;
+  const data = {
+    id,
+    nombre,
+    fecha: document.getElementById('empFecha').value,
+    depto: document.getElementById('empDepto').value.trim(),
+    sueldoHora: +document.getElementById('empSueldo').value || 0,
+    turnoId: document.getElementById('empTurno').value,
+    codigoId: document.getElementById('empCodigo').value,
+    foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : '')
+  };
+  if(editingKey){
+    const idx = EMPLOYEES.findIndex(x=>x.id===editingKey);
+    if(idx>-1) EMPLOYEES[idx] = data;
+  } else {
+    if(EMPLOYEES.some(x=>x.id===id)){ toast('Ya existe un empleado con ese número.'); return; }
+    EMPLOYEES.push(data);
+  }
+  saveStorage();
+  renderEmployeesTable();
+  refreshAllEmployeeSelects();
+  resetEmployeeForm();
+  toast('Empleado guardado.');
+});
+document.getElementById('btnCancelEditEmployee').addEventListener('click', resetEmployeeForm);
+
+function editEmployee(id){
+  const emp = EMPLOYEES.find(x=>x.id===id); if(!emp) return;
+  document.getElementById('empEditingKey').value = id;
+  document.getElementById('empNombre').value = emp.nombre;
+  document.getElementById('empId').value = emp.id;
+  document.getElementById('empFecha').value = emp.fecha || '';
+  document.getElementById('empDepto').value = emp.depto || '';
+  document.getElementById('empSueldo').value = emp.sueldoHora || '';
+  document.getElementById('empTurno').value = emp.turnoId || '';
+  document.getElementById('empCodigo').value = emp.codigoId || '';
+  if(emp.foto){ document.getElementById('empFotoPreview').src = emp.foto; document.getElementById('empFotoPreview').style.display='inline-block'; document.getElementById('empFotoPlaceholder').style.display='none'; }
+  else { document.getElementById('empFotoPreview').style.display='none'; document.getElementById('empFotoPlaceholder').style.display='flex'; }
+  PENDING_PHOTO = '';
+  document.getElementById('btnSaveEmployee').textContent = 'Guardar cambios';
+  document.getElementById('btnCancelEditEmployee').style.display='inline-block';
+  document.querySelector('nav.tabs button[data-tab=employees]').click();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+function deleteEmployee(id){
+  if(!confirm('¿Eliminar este empleado del directorio? (Las checadas ya importadas no se borran)')) return;
+  EMPLOYEES = EMPLOYEES.filter(x=>x.id!==id);
+  saveStorage(); renderEmployeesTable(); refreshAllEmployeeSelects();
+}
+function renderEmployeesTable(){
+  const area = document.getElementById('employeesTableArea');
+  if(!EMPLOYEES.length){ area.innerHTML = emptyState('Aún no hay empleados registrados en el directorio.'); return; }
+  let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th></th></tr></thead><tbody>`;
+  EMPLOYEES.forEach(e=>{
+    const turno = TURNOS.find(t=>t.id===e.turnoId);
+    const codigo = CODIGOS.find(c=>c.id===e.codigoId);
+    html += `<tr>
+      <td>${e.foto ? `<img class="avatar" src="${e.foto}">` : `<div class="avatar avatar-placeholder" style="font-size:11px;">${e.nombre.slice(0,2).toUpperCase()}</div>`}</td>
+      <td><b>${e.nombre}</b></td>
+      <td class="mono">${e.id}</td>
+      <td>${e.depto||'—'}</td>
+      <td class="mono">${e.fecha||'—'}</td>
+      <td class="mono">${e.sueldoHora ? '$'+Number(e.sueldoHora).toFixed(2) : '—'}</td>
+      <td>${turno ? turno.nombre : '—'}</td>
+      <td>${codigo ? codigo.clave : '—'}</td>
+      <td><button class="btn secondary small" onclick="editEmployee('${e.id}')">Editar</button> <button class="btn danger small" onclick="deleteEmployee('${e.id}')">Eliminar</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+
+/* ---------- turnos ---------- */
+document.getElementById('btnAddTurno').addEventListener('click', ()=>{
+  const nombre = document.getElementById('turNombre').value.trim();
+  if(!nombre){ toast('Ponle un nombre al turno.'); return; }
+  TURNOS.push({ id: uid(), nombre, entrada: document.getElementById('turEntrada').value, salida: document.getElementById('turSalida').value, tolerancia: +document.getElementById('turTolerancia').value||0 });
+  document.getElementById('turNombre').value='';
+  saveStorage(); renderTurnosTable(); refreshTurnoCodigoSelects();
+  toast('Turno agregado.');
+});
+function deleteTurno(id){
+  TURNOS = TURNOS.filter(t=>t.id!==id);
+  EMPLOYEES.forEach(e=>{ if(e.turnoId===id) e.turnoId=''; });
+  saveStorage(); renderTurnosTable(); renderEmployeesTable(); refreshTurnoCodigoSelects();
+}
+function renderTurnosTable(){
+  const area = document.getElementById('turnosTableArea');
+  refreshTurnoCodigoSelects();
+  if(!TURNOS.length){ area.innerHTML = emptyState('No hay turnos definidos todavía.'); return; }
+  let html = `<table><thead><tr><th>Nombre</th><th>Entrada</th><th>Salida</th><th>Tolerancia</th><th></th></tr></thead><tbody>`;
+  TURNOS.forEach(t=>{
+    html += `<tr><td><b>${t.nombre}</b></td><td class="mono">${t.entrada}</td><td class="mono">${t.salida}</td><td class="mono">${t.tolerancia} min</td>
+    <td><button class="btn danger small" onclick="deleteTurno('${t.id}')">Eliminar</button></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+
+/* ---------- códigos de pago ---------- */
+document.getElementById('btnAddCodigo').addEventListener('click', ()=>{
+  const clave = document.getElementById('codClave').value.trim();
+  const nombre = document.getElementById('codNombre').value.trim();
+  if(!clave || !nombre){ toast('Completa clave y nombre.'); return; }
+  CODIGOS.push({ id: uid(), clave, nombre });
+  document.getElementById('codClave').value=''; document.getElementById('codNombre').value='';
+  saveStorage(); renderCodigosTable(); refreshTurnoCodigoSelects();
+  toast('Código agregado.');
+});
+function deleteCodigo(id){
+  CODIGOS = CODIGOS.filter(c=>c.id!==id);
+  EMPLOYEES.forEach(e=>{ if(e.codigoId===id) e.codigoId=''; });
+  saveStorage(); renderCodigosTable(); renderEmployeesTable(); refreshTurnoCodigoSelects();
+}
+function renderCodigosTable(){
+  const area = document.getElementById('codigosTableArea');
+  refreshTurnoCodigoSelects();
+  if(!CODIGOS.length){ area.innerHTML = emptyState('No hay códigos de pago definidos todavía.'); return; }
+  let html = `<table><thead><tr><th>Clave</th><th>Nombre / descripción</th><th></th></tr></thead><tbody>`;
+  CODIGOS.forEach(c=>{
+    html += `<tr><td class="mono"><b>${c.clave}</b></td><td>${c.nombre}</td><td><button class="btn danger small" onclick="deleteCodigo('${c.id}')">Eliminar</button></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+
+/* ---------- config ---------- */
+document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
+  CONFIG.entrada = document.getElementById('cfgEntrada').value || '08:00';
+  CONFIG.tolerancia = +document.getElementById('cfgTolerancia').value || 0;
+  CONFIG.jornada = +document.getElementById('cfgJornada').value || 8;
+  CONFIG.multiplicador = +document.getElementById('cfgMultiplicador').value || 2;
+  CONFIG.dias = Array.from(document.querySelectorAll('#cfgDias input:checked')).map(cb=>+cb.value);
+  saveStorage();
+  document.getElementById('configMsg').textContent = 'Configuración guardada.';
+  toast('Configuración guardada.');
+});
+
+/* ---------- cálculo ---------- */
+function computeDay(id, fecha){
+  const dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
+  const segments = [];
+  for(let i=0;i+1<dayPunches.length;i+=2){
+    const inP = dayPunches[i], outP = dayPunches[i+1];
+    const mins = Math.max(0, (outP.ts - inP.ts)/60000);
+    segments.push({ inTime: inP.hora, outTime: outP.hora, mins });
+  }
+  const incomplete = dayPunches.length % 2 !== 0;
+  const totalMins = segments.reduce((s,x)=>s+x.mins,0);
+  return { punches: dayPunches, segments, totalMins, incomplete };
+}
+function getSueldoHora(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  return emp && emp.sueldoHora ? Number(emp.sueldoHora) : 0;
+}
+function fmtMoney(n){
+  return '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function computePagoDia(id, totalMins){
+  const sueldoHora = getSueldoHora(id);
+  const jornadaMins = (CONFIG.jornada || 8) * 60;
+  const normalMins = Math.min(totalMins, jornadaMins);
+  const extraMins = Math.max(0, totalMins - jornadaMins);
+  const mult = CONFIG.multiplicador || 2;
+  const pagoNormal = (normalMins/60) * sueldoHora;
+  const pagoExtra = (extraMins/60) * sueldoHora * mult;
+  return { sueldoHora, normalMins, extraMins, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra };
+}
+function getScheduleFor(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(emp && emp.turnoId){
+    const t = TURNOS.find(x=>x.id===emp.turnoId);
+    if(t) return { entrada: t.entrada, tolerancia: t.tolerancia };
+  }
+  return { entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia };
+}
+function isLate(id, dayPunches){
+  if(!dayPunches.length) return false;
+  const sched = getScheduleFor(id);
+  const [eh, em] = sched.entrada.split(':').map(Number);
+  const d = new Date(dayPunches[0].ts);
+  const limitMins = eh*60+em+sched.tolerancia;
+  const actualMins = d.getHours()*60+d.getMinutes();
+  return actualMins > limitMins;
+}
+function dateRange(fromStr, toStr){
+  const out = [];
+  let d = new Date(fromStr+'T00:00:00');
+  const end = new Date(toStr+'T00:00:00');
+  while(d<=end){ out.push(isoDate(d)); d.setDate(d.getDate()+1); }
+  return out;
+}
+function employeeDisplayName(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(emp) return emp.nombre;
+  const p = PUNCHES.find(p=>p.id===id);
+  return p ? p.nombre : id;
+}
+function allKnownEmployeeIds(){
+  const set = new Set();
+  EMPLOYEES.forEach(e=>set.add(e.id));
+  PUNCHES.forEach(p=>set.add(p.id));
+  return Array.from(set);
+}
+function refreshAllEmployeeSelects(){
+  const ids = allKnownEmployeeIds();
+  const opts = ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+
+  const rep = document.getElementById('repEmpleado'); const repCur = rep.value;
+  rep.innerHTML = '<option value="">-- selecciona empleado --</option>' + opts;
+  if(ids.includes(repCur)) rep.value = repCur;
+
+  const cal = document.getElementById('calEmpleado'); const calCur = cal.value;
+  cal.innerHTML = ids.length ? opts : '<option value="">-- sin empleados --</option>';
+  if(ids.includes(calCur)) cal.value = calCur;
+
+  const week = document.getElementById('weekEmpleado'); const weekCur = week.value;
+  week.innerHTML = '<option value="__all__">Todos los empleados</option>' + opts;
+  if(weekCur && (weekCur==='__all__' || ids.includes(weekCur))) week.value = weekCur;
+}
+
+/* ---------- resumen por periodo ---------- */
+function computeEmployeePeriod(id, from, to){
+  const days = dateRange(from, to);
+  let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pago=0;
+  days.forEach(fecha=>{
+    const dow = new Date(fecha+'T00:00:00').getDay();
+    const laborable = CONFIG.dias.includes(dow);
+    const info = computeDay(id, fecha);
+    totalMins += info.totalMins;
+    const p = computePagoDia(id, info.totalMins);
+    extraMins += p.extraMins;
+    pago += p.pagoTotal;
+    if(laborable){
+      laborables++;
+      if(info.punches.length===0) faltas++;
+      else if(isLate(id, info.punches)) retardos++;
+    }
+  });
+  const sueldoHora = getSueldoHora(id);
+  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pago };
+}
+document.getElementById('btnQuickWeek').addEventListener('click', ()=>{
+  const d = new Date(); const dow = d.getDay();
+  const diffToMonday = (dow===0) ? -6 : 1-dow;
+  const monday = new Date(d); monday.setDate(d.getDate()+diffToMonday);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+  document.getElementById('weekDesde').value = isoDate(monday);
+  document.getElementById('weekHasta').value = isoDate(sunday);
+  document.getElementById('btnLoadWeek').click();
+});
+document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
+  const from = document.getElementById('weekDesde').value;
+  const to = document.getElementById('weekHasta').value;
+  const empSel = document.getElementById('weekEmpleado').value;
+  const area = document.getElementById('weekArea');
+  if(!from || !to){ toast('Elige el rango de fechas.'); return; }
+  if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
+
+  const ids = empSel==='__all__' ? allKnownEmployeeIds() : [empSel];
+  if(!ids.length || !ids[0]){ area.innerHTML = emptyState('No hay empleados para mostrar todavía.'); return; }
+
+  let grandTotalPago = 0, anySueldo = false;
+  let html = `<table><thead><tr><th>Empleado</th><th>No.</th><th>Días laborables</th><th>Faltas</th><th>Retardos</th><th>Horas totales</th><th>Horas extra</th><th>Sueldo/hora</th><th>Pago total</th></tr></thead><tbody>`;
+  ids.forEach(id=>{
+    const r = computeEmployeePeriod(id, from, to);
+    if(r.sueldoHora) anySueldo = true;
+    grandTotalPago += r.pago;
+    html += `<tr>
+      <td><b>${employeeDisplayName(id)}</b></td>
+      <td class="mono">${id}</td>
+      <td class="mono">${r.laborables}</td>
+      <td>${r.faltas ? `<span class="tag absent">${r.faltas}</span>` : '<span class="tag ok">0</span>'}</td>
+      <td>${r.retardos ? `<span class="tag late">${r.retardos}</span>` : '<span class="tag ok">0</span>'}</td>
+      <td class="mono"><b>${fmtHM(r.totalMins)}</b></td>
+      <td class="mono">${r.extraMins ? `<span class="tag late">${fmtHM(r.extraMins)}</span>` : '—'}</td>
+      <td class="mono">${r.sueldoHora ? fmtMoney(r.sueldoHora) : '—'}</td>
+      <td class="mono"><b>${r.sueldoHora ? fmtMoney(r.pago) : '—'}</b></td>
+    </tr>`;
+  });
+  html += `</tbody>`;
+  if(ids.length>1){
+    html += `<tfoot><tr><td colspan="7" style="text-align:right; font-weight:700;">Total del periodo</td><td></td><td class="mono"><b>${anySueldo ? fmtMoney(grandTotalPago) : '—'}</b></td></tr></tfoot>`;
+  }
+  html += `</table>`;
+  if(!anySueldo){
+    html = `<div class="hint" style="margin-top:14px;">Ningún empleado en esta vista tiene sueldo por hora capturado todavía — agrégalo en la pestaña <b>Empleados</b> para ver el pago calculado.</div>` + html;
+  }
+  area.innerHTML = html;
+});
+
+/* ---------- calendario ---------- */
+function renderCalendar(){
+  const empId = document.getElementById('calEmpleado').value;
+  const monthVal = document.getElementById('calMonth').value;
+  const area = document.getElementById('calendarArea');
+  if(!empId || !monthVal){ area.innerHTML = emptyState('Elige un empleado y un mes para ver el calendario.'); return; }
+
+  const [yr, mo] = monthVal.split('-').map(Number);
+  const first = new Date(yr, mo-1, 1);
+  const last = new Date(yr, mo, 0);
+  const startOffset = (first.getDay()+6)%7; // lunes=0
+
+  const dowLabels = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+  let html = `<div class="cal-grid">` + dowLabels.map(l=>`<div class="cal-dow">${l}</div>`).join('');
+  for(let i=0;i<startOffset;i++) html += `<div class="cal-cell muted"></div>`;
+
+  for(let day=1; day<=last.getDate(); day++){
+    const d = new Date(yr, mo-1, day);
+    const fecha = isoDate(d);
+    const dow = d.getDay();
+    const laborable = CONFIG.dias.includes(dow);
+    const info = computeDay(empId, fecha);
+    let cls = 'neutral', label='';
+    if(laborable){
+      if(info.punches.length===0){ cls='absent'; label='Falta'; }
+      else if(isLate(empId, info.punches)){ cls='late'; label='Retardo'; }
+      else { cls='ok'; label='A tiempo'; }
+    }
+    html += `<div class="cal-cell ${cls}">
+      <div class="d">${day}</div>
+      ${laborable ? `<div class="hrs">${info.punches.length? fmtHM(info.totalMins) : '—'}</div><div style="font-size:10.5px; color:var(--ink-soft);">${label}</div>` : `<div style="font-size:10.5px; color:var(--ink-soft);">No laborable</div>`}
+    </div>`;
+  }
+  html += `</div>`;
+  area.innerHTML = html;
+}
+document.getElementById('calEmpleado').addEventListener('change', renderCalendar);
+document.getElementById('calMonth').addEventListener('change', renderCalendar);
+document.getElementById('btnCalPrev').addEventListener('click', ()=>{
+  const [yr,mo] = document.getElementById('calMonth').value.split('-').map(Number);
+  const d = new Date(yr, mo-2, 1);
+  document.getElementById('calMonth').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+  renderCalendar();
+});
+document.getElementById('btnCalNext').addEventListener('click', ()=>{
+  const [yr,mo] = document.getElementById('calMonth').value.split('-').map(Number);
+  const d = new Date(yr, mo, 1);
+  document.getElementById('calMonth').value = `${d.getFullYear()}-${pad(d.getMonth()+1)}`;
+  renderCalendar();
+});
+
+/* ---------- reporte por empleado ---------- */
+document.getElementById('btnGenReport').addEventListener('click', ()=>{
+  const id = document.getElementById('repEmpleado').value;
+  const from = document.getElementById('repDesde').value;
+  const to = document.getElementById('repHasta').value;
+  const area = document.getElementById('reportArea');
+  if(!id){ toast('Elige un empleado.'); return; }
+  if(!from || !to){ toast('Elige el rango de fechas.'); return; }
+  if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
+
+  const nombre = employeeDisplayName(id);
+  const days = dateRange(from, to);
+  let totalMins=0, retardos=0, faltas=0;
+  const rows = days.map(fecha=>{
+    const dow = new Date(fecha+'T00:00:00').getDay();
+    const laborable = CONFIG.dias.includes(dow);
+    const info = computeDay(id, fecha);
+    totalMins += info.totalMins;
+    let status='neutral', label='No laborable';
+    if(laborable){
+      if(info.punches.length===0){ status='absent'; label='Falta'; faltas++; }
+      else{ const late = isLate(id, info.punches); if(late){status='late'; label='Retardo'; retardos++;} else {status='ok'; label='A tiempo';} }
+    }
+    return { fecha, laborable, info, status, label };
+  });
+  const sueldoHora = getSueldoHora(id);
+  let totalExtraMins = 0, totalPago = 0;
+  rows.forEach(r=>{
+    const p = computePagoDia(id, r.info.totalMins);
+    r.pago = p;
+    totalExtraMins += p.extraMins;
+    totalPago += p.pagoTotal;
+  });
+  window._lastReport = { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago };
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  let html = `
+    <div class="stat-grid">
+      <div class="stat"><div class="n">${fmtHM(totalMins)}</div><div class="l">Horas totales</div></div>
+      <div class="stat"><div class="n">${fmtHM(totalExtraMins)}</div><div class="l">Horas extra</div></div>
+      <div class="stat"><div class="n">${retardos}</div><div class="l">Retardos</div></div>
+      <div class="stat"><div class="n">${faltas}</div><div class="l">Faltas</div></div>
+      <div class="stat"><div class="n">${sueldoHora ? fmtMoney(sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
+      <div class="stat"><div class="n">${sueldoHora ? fmtMoney(totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
+    </div>`;
+  if(!sueldoHora){
+    html += `<div class="hint">Este empleado no tiene sueldo por hora capturado — agrégalo en la pestaña <b>Empleados</b> para calcular su pago.</div>`;
+  }
+  html += `<table><thead><tr><th>Fecha</th><th>Día</th><th>Checadas</th><th>Pares entrada/salida</th><th>Horas normales</th><th>Horas extra</th><th>Pago del día</th><th>Estado</th></tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const dName = dayNames[new Date(r.fecha+'T00:00:00').getDay()];
+    const checks = r.info.punches.map(p=>p.hora.slice(0,5)).join(', ') || '—';
+    const pares = r.info.segments.length ? r.info.segments.map(s=>`${s.inTime.slice(0,5)}–${s.outTime.slice(0,5)}`).join(', ') : '—';
+    html += `<tr>
+      <td class="mono">${r.fecha}</td><td>${dName}</td>
+      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late">impar</span>' : ''}</td>
+      <td class="mono">${pares}</td>
+      <td class="mono">${fmtHM(r.pago.normalMins)}</td>
+      <td class="mono">${r.pago.extraMins ? `<span class="tag late">${fmtHM(r.pago.extraMins)}</span>` : '—'}</td>
+      <td class="mono">${sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
+      <td><span class="tag ${r.status}">${r.label}</span></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+  document.getElementById('btnExportReport').disabled = false;
+});
+document.getElementById('btnExportReport').addEventListener('click', ()=>{
+  const rep = window._lastReport; if(!rep) return;
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const data = rep.rows.map(r=>({
+    Fecha: r.fecha, Dia: dayNames[new Date(r.fecha+'T00:00:00').getDay()],
+    Checadas: r.info.punches.map(p=>p.hora.slice(0,5)).join(', '),
+    'Pares entrada-salida': r.info.segments.map(s=>`${s.inTime.slice(0,5)}-${s.outTime.slice(0,5)}`).join(', '),
+    'Horas normales': fmtHM(r.pago.normalMins),
+    'Horas extra': fmtHM(r.pago.extraMins),
+    'Pago del día': rep.sueldoHora ? r.pago.pagoTotal : '',
+    Estado: r.label
+  }));
+  data.push({});
+  data.push({ Fecha:'TOTAL', Checadas:'', 'Pares entrada-salida':'', 'Horas normales': fmtHM(rep.totalMins-rep.totalExtraMins), 'Horas extra': fmtHM(rep.totalExtraMins), 'Pago del día': rep.sueldoHora ? rep.totalPago : '', Estado: `Retardos: ${rep.retardos} · Faltas: ${rep.faltas} · Sueldo/hora: ${rep.sueldoHora || '—'}` });
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+  XLSX.writeFile(wb, `reporte_${rep.nombre.replace(/\s+/g,'_')}_${rep.from}_a_${rep.to}.xlsx`);
+});
+
+function emptyState(msg){
+  return `<div class="empty">
+    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#4b5b70" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    <div>${msg}</div>
+  </div>`;
+}
+
+/* ---------- init ---------- */
+loadStorage();
 </script>
 </body>
 </html>
