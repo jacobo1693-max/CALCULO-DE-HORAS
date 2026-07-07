@@ -163,12 +163,12 @@
   <!-- IMPORT -->
   <section class="panel active" id="panel-import">
     <h2>Importar archivo del checador</h2>
-    <p class="sub">Sube el archivo que exporta el software del BM160 (.xlsx, .xls o .csv). Puede tener cualquier orden de columnas: solo indica cuál es cuál abajo.</p>
+    <p class="sub">Sube el archivo que exporta el software del BM160: puede ser .xlsx, .xls, .csv, o el archivo crudo <b>.dat</b> / .txt que descargas directo del checador (por USB o del software, normalmente llamado algo como "attlog.dat"). Puede tener cualquier orden de columnas: solo indica cuál es cuál abajo.</p>
 
     <div class="row">
       <div class="field">
         <label>Archivo exportado</label>
-        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.dat,.txt">
       </div>
       <button class="btn secondary" id="btnClearAll">Borrar todos los datos guardados</button>
     </div>
@@ -186,7 +186,7 @@
           <select id="mapId"></select>
         </div>
         <div class="field">
-          <label>Nombre del empleado</label>
+          <label>Nombre del empleado (opcional)</label>
           <select id="mapNombre"></select>
         </div>
         <div class="field" id="mapFechaWrap">
@@ -570,11 +570,17 @@ setInterval(()=>{
 document.getElementById('fileInput').addEventListener('change', (e)=>{
   const file = e.target.files[0];
   if(!file) return;
+  const nameLower = file.name.toLowerCase();
+  const isRaw = nameLower.endsWith('.dat') || nameLower.endsWith('.txt');
   const reader = new FileReader();
   reader.onload = (evt)=>{
-    let workbook;
     try{
-      if(file.name.toLowerCase().endsWith('.csv')){
+      if(isRaw){
+        parseRawAttlog(evt.target.result);
+        return;
+      }
+      let workbook;
+      if(nameLower.endsWith('.csv')){
         workbook = XLSX.read(evt.target.result, {type:'string', cellDates:true});
       } else {
         workbook = XLSX.read(evt.target.result, {type:'array', cellDates:true});
@@ -588,9 +594,43 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
       toast('Archivo leído: ' + rows.length + ' filas.');
     }catch(err){ console.error(err); toast('No se pudo leer el archivo. Revisa el formato.'); }
   };
-  if(file.name.toLowerCase().endsWith('.csv')) reader.readAsText(file);
+  if(isRaw || nameLower.endsWith('.csv')) reader.readAsText(file);
   else reader.readAsArrayBuffer(file);
 });
+
+/* Archivo crudo tipo attlog.dat del checador: texto separado por TAB, sin encabezados.
+   Formato típico: ID <TAB> "YYYY-MM-DD HH:MM:SS" <TAB> estado <TAB> modo <TAB> workcode <TAB> reservado */
+function parseRawAttlog(text){
+  const lines = text.split(/\r\n|\r|\n/).map(l=>l.trim()).filter(l=>l.length);
+  if(!lines.length){ toast('El archivo está vacío.'); return; }
+  const rows = lines.map(line=>{
+    const cols = line.split('\t').map(c=>c.trim());
+    const obj = {};
+    cols.forEach((c,i)=>{ obj['Columna '+(i+1)] = c; });
+    return obj;
+  });
+  const maxCols = Math.max(...rows.map(r=>Object.keys(r).length));
+  HEADERS = [];
+  for(let i=1;i<=maxCols;i++) HEADERS.push('Columna '+i);
+  rows.forEach(r=>{ HEADERS.forEach(h=>{ if(!(h in r)) r[h]=''; }); });
+  PARSED_ROWS = rows;
+  buildMappingUI();
+
+  // Detección automática del formato ZKTeco/BM160: col1 = ID numérico, col2 = fecha y hora juntas
+  const sample = rows[0];
+  const col1LooksId = /^\d+$/.test(sample['Columna 1']||'');
+  const col2LooksDate = parseCombined(sample['Columna 2']) !== null;
+  if(col1LooksId && col2LooksDate){
+    document.getElementById('combinedToggle').checked = true;
+    document.getElementById('combinedToggle').dispatchEvent(new Event('change'));
+    document.getElementById('mapId').value = 'Columna 1';
+    document.getElementById('mapCombined').value = 'Columna 2';
+    document.getElementById('mapNombre').value = '';
+    toast('Archivo del checador detectado: ' + rows.length + ' checadas. No trae nombres — se usará tu directorio de empleados.');
+  } else {
+    toast('Archivo leído: ' + rows.length + ' filas. Revisa el mapeo de columnas.');
+  }
+}
 function guessColumn(candidates){
   const lower = HEADERS.map(h=>String(h).toLowerCase());
   for(const cand of candidates){ const idx = lower.findIndex(h=>h.includes(cand)); if(idx>-1) return HEADERS[idx]; }
@@ -632,16 +672,16 @@ document.getElementById('btnProcess').addEventListener('click', ()=>{
   const colFecha = document.getElementById('mapFecha').value;
   const colHora = document.getElementById('mapHora').value;
   const colCombined = document.getElementById('mapCombined').value;
-  if(!colId || !colNombre || (combined ? !colCombined : (!colFecha || !colHora))){ toast('Falta seleccionar alguna columna.'); return; }
+  if(!colId || (combined ? !colCombined : (!colFecha || !colHora))){ toast('Falta seleccionar alguna columna (mínimo ID y fecha/hora).'); return; }
   let added=0, skipped=0;
   const newPunches = [];
   for(const row of PARSED_ROWS){
     const id = String(row[colId]).trim();
-    const nombre = String(row[colNombre]).trim();
-    if(!id || !nombre){ skipped++; continue; }
+    const nombre = colNombre ? String(row[colNombre]).trim() : '';
+    if(!id){ skipped++; continue; }
     let dt = combined ? parseCombined(row[colCombined]) : combineDateTime(row[colFecha], row[colHora]);
     if(!dt || isNaN(dt)){ skipped++; continue; }
-    newPunches.push({ id, nombre, fecha: isoDate(dt), hora: `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`, ts: dt.getTime() });
+    newPunches.push({ id, nombre: nombre || id, fecha: isoDate(dt), hora: `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`, ts: dt.getTime() });
     added++;
   }
   const key = p => `${p.id}|${p.ts}`;
