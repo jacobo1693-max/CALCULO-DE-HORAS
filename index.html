@@ -151,6 +151,7 @@
     body *{ visibility:hidden; }
     #printArea, #printArea *{ visibility:visible; }
     #printArea{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0; }
+    #printArea button{ display:none !important; }
     table{ font-size:11.5px; }
     .tag{ border:1px solid currentColor; }
     @page{ margin:14mm; }
@@ -355,8 +356,12 @@
         <label>Multiplicador de hora extra</label>
         <input type="number" id="cfgMultiplicador" value="2" min="1" step="0.1">
       </div>
+      <div class="field">
+        <label>Bono de puntualidad (%)</label>
+        <input type="number" id="cfgBono" value="7" min="0" step="0.5">
+      </div>
     </div>
-    <div class="hint" style="margin-top:14px;">Cualquier hora trabajada en un día por arriba de la jornada esperada se paga como hora extra, multiplicando el sueldo por hora por este factor (ej. 2 = doble).</div>
+    <div class="hint" style="margin-top:14px;">Cualquier hora trabajada en un día por arriba de la jornada esperada se paga como hora extra, multiplicando el sueldo por hora por este factor (ej. 2 = doble) — y solo si la autorizas en el reporte del empleado. El bono de puntualidad se paga sobre el sueldo normal del periodo únicamente a quien no tenga ni una falta ni un retardo en ese rango de fechas.</div>
     <div style="margin-top:18px;">
       <label style="font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase;">Días laborables (default)</label>
       <div class="checkrow" id="cfgDias">
@@ -505,10 +510,11 @@
 <script>
 /* ---------- estado ---------- */
 let PUNCHES = [];
-let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, dias:[1,2,3,4,5] };
+let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5] };
 let EMPLOYEES = [];   // {id, nombre, fecha, depto, turnoId, codigoId, foto}
 let TURNOS = [];      // {id, nombre, entrada, salida, tolerancia}
 let CODIGOS = [];     // {id, clave, nombre}
+let AUTORIZACIONES = {}; // { "id|fecha": true/false } — true = hora extra autorizada (default true si no existe)
 let PARSED_ROWS = [];
 let HEADERS = [];
 
@@ -606,6 +612,7 @@ async function saveStorage(){
     await window.storage.set('bm160-employees', JSON.stringify(EMPLOYEES), false);
     await window.storage.set('bm160-turnos', JSON.stringify(TURNOS), false);
     await window.storage.set('bm160-codigos', JSON.stringify(CODIGOS), false);
+    await window.storage.set('bm160-autorizaciones', JSON.stringify(AUTORIZACIONES), false);
   }catch(e){ console.error('storage error', e); }
 }
 async function loadStorage(){
@@ -625,6 +632,7 @@ async function loadStorage(){
     return t;
   });
   try{ const cod = await window.storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
+  try{ const az = await window.storage.get('bm160-autorizaciones', false); if(az&&az.value) AUTORIZACIONES = JSON.parse(az.value); }catch(e){ AUTORIZACIONES={}; }
   applyConfigToForm();
   buildTurDiasRows(null);
   renderEmployeesTable();
@@ -639,6 +647,7 @@ function applyConfigToForm(){
   document.getElementById('cfgTolerancia').value = CONFIG.tolerancia;
   document.getElementById('cfgJornada').value = CONFIG.jornada;
   document.getElementById('cfgMultiplicador').value = CONFIG.multiplicador || 2;
+  document.getElementById('cfgBono').value = CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7;
   document.querySelectorAll('#cfgDias input[type=checkbox]').forEach(cb=>{ cb.checked = CONFIG.dias.includes(+cb.value); });
 }
 
@@ -1084,6 +1093,8 @@ document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.tolerancia = +document.getElementById('cfgTolerancia').value || 0;
   CONFIG.jornada = +document.getElementById('cfgJornada').value || 8;
   CONFIG.multiplicador = +document.getElementById('cfgMultiplicador').value || 2;
+  CONFIG.bonoPuntualidad = +document.getElementById('cfgBono').value;
+  if(isNaN(CONFIG.bonoPuntualidad)) CONFIG.bonoPuntualidad = 7;
   CONFIG.dias = Array.from(document.querySelectorAll('#cfgDias input:checked')).map(cb=>+cb.value);
   saveStorage();
   document.getElementById('configMsg').textContent = 'Configuración guardada.';
@@ -1110,6 +1121,19 @@ function getSueldoHora(id){
 function fmtMoney(n){
   return '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
+function isExtraAuthorized(id, fecha){
+  return AUTORIZACIONES[`${id}|${fecha}`] !== false; // por default, autorizada (compatibilidad hacia atrás)
+}
+async function toggleAutorizacion(id, fecha){
+  const key = `${id}|${fecha}`;
+  const wasAuthorized = isExtraAuthorized(id, fecha);
+  AUTORIZACIONES[key] = !wasAuthorized;
+  await saveStorage();
+  toast(!wasAuthorized ? 'Hora extra autorizada.' : 'Hora extra retirada (no autorizada) — no se pagará.');
+  if(window._lastReportParams){
+    generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
+  }
+}
 function computePagoDia(id, fecha, totalMins){
   const sueldoHora = getSueldoHora(id);
   const sched = getScheduleFor(id, fecha);
@@ -1117,9 +1141,10 @@ function computePagoDia(id, fecha, totalMins){
   const normalMins = Math.min(totalMins, jornadaMins);
   const extraMins = Math.max(0, totalMins - jornadaMins);
   const mult = CONFIG.multiplicador || 2;
+  const autorizado = isExtraAuthorized(id, fecha);
   const pagoNormal = (normalMins/60) * sueldoHora;
-  const pagoExtra = (extraMins/60) * sueldoHora * mult;
-  return { sueldoHora, normalMins, extraMins, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra };
+  const pagoExtra = autorizado ? (extraMins/60) * sueldoHora * mult : 0;
+  return { sueldoHora, normalMins, extraMins, autorizado, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra };
 }
 function getScheduleFor(id, fecha){
   const dow = new Date(fecha+'T00:00:00').getDay();
@@ -1192,14 +1217,15 @@ function refreshAllEmployeeSelects(){
 /* ---------- resumen por periodo ---------- */
 function computeEmployeePeriod(id, from, to){
   const days = dateRange(from, to);
-  let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pago=0;
+  let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pagoNormal=0, pagoExtra=0;
   days.forEach(fecha=>{
     const sched = getScheduleFor(id, fecha);
     const info = computeDay(id, fecha);
     totalMins += info.totalMins;
     const p = computePagoDia(id, fecha, info.totalMins);
     extraMins += p.extraMins;
-    pago += p.pagoTotal;
+    pagoNormal += p.pagoNormal;
+    pagoExtra += p.pagoExtra;
     if(sched.activo){
       laborables++;
       if(info.punches.length===0) faltas++;
@@ -1207,7 +1233,11 @@ function computeEmployeePeriod(id, from, to){
     }
   });
   const sueldoHora = getSueldoHora(id);
-  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pago };
+  const puntual = laborables>0 && faltas===0 && retardos===0;
+  const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
+  const bono = puntual ? pagoNormal*bonoPct : 0;
+  const pago = pagoNormal + pagoExtra + bono;
+  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pagoNormal, pagoExtra, bono, puntual, bonoPct, pago };
 }
 document.getElementById('btnQuickWeek').addEventListener('click', ()=>{
   const d = new Date(); const dow = d.getDay();
@@ -1230,11 +1260,14 @@ document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
   if(!ids.length || !ids[0]){ area.innerHTML = emptyState('No hay empleados para mostrar todavía.'); return; }
 
   let grandTotalPago = 0, anySueldo = false;
-  let html = `<table><thead><tr><th>Empleado</th><th>No.</th><th>Días laborables</th><th>Faltas</th><th>Retardos</th><th>Horas totales</th><th>Horas extra</th><th>Sueldo/hora</th><th>Pago total</th></tr></thead><tbody>`;
+  let html = `<table><thead><tr><th>Empleado</th><th>No.</th><th>Días laborables</th><th>Faltas</th><th>Retardos</th><th>Horas totales</th><th>Horas extra</th><th>Sueldo/hora</th><th>Bono puntualidad</th><th>Pago total</th></tr></thead><tbody>`;
   ids.forEach(id=>{
     const r = computeEmployeePeriod(id, from, to);
     if(r.sueldoHora) anySueldo = true;
     grandTotalPago += r.pago;
+    const bonoCell = r.puntual
+      ? (r.sueldoHora ? `<span class="tag ok">${fmtMoney(r.bono)}</span>` : `<span class="tag ok">Puntual</span>`)
+      : '—';
     html += `<tr>
       <td><b>${employeeDisplayName(id)}</b></td>
       <td class="mono">${id}</td>
@@ -1244,12 +1277,13 @@ document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
       <td class="mono"><b>${fmtHM(r.totalMins)}</b></td>
       <td class="mono">${r.extraMins ? `<span class="tag late">${fmtHM(r.extraMins)}</span>` : '—'}</td>
       <td class="mono">${r.sueldoHora ? fmtMoney(r.sueldoHora) : '—'}</td>
+      <td class="mono">${bonoCell}</td>
       <td class="mono"><b>${r.sueldoHora ? fmtMoney(r.pago) : '—'}</b></td>
     </tr>`;
   });
   html += `</tbody>`;
   if(ids.length>1){
-    html += `<tfoot><tr><td colspan="7" style="text-align:right; font-weight:700;">Total del periodo</td><td></td><td class="mono"><b>${anySueldo ? fmtMoney(grandTotalPago) : '—'}</b></td></tr></tfoot>`;
+    html += `<tfoot><tr><td colspan="8" style="text-align:right; font-weight:700;">Total del periodo</td><td></td><td class="mono"><b>${anySueldo ? fmtMoney(grandTotalPago) : '—'}</b></td></tr></tfoot>`;
   }
   html += `</table>`;
   if(!anySueldo){
@@ -1312,15 +1346,7 @@ document.getElementById('btnCalNext').addEventListener('click', ()=>{
 });
 
 /* ---------- reporte por empleado ---------- */
-document.getElementById('btnGenReport').addEventListener('click', ()=>{
-  const id = document.getElementById('repEmpleado').value;
-  const from = document.getElementById('repDesde').value;
-  const to = document.getElementById('repHasta').value;
-  const area = document.getElementById('reportArea');
-  if(!id){ toast('Elige un empleado.'); return; }
-  if(!from || !to){ toast('Elige el rango de fechas.'); return; }
-  if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
-
+function generateEmployeeReport(id, from, to){
   const nombre = employeeDisplayName(id);
   const days = dateRange(from, to);
   let totalMins=0, retardos=0, faltas=0;
@@ -1337,14 +1363,23 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
     return { fecha, laborable, info, status, label };
   });
   const sueldoHora = getSueldoHora(id);
-  let totalExtraMins = 0, totalPago = 0;
+  let totalExtraMins = 0, totalPagoNormal = 0, totalPagoExtra = 0;
   rows.forEach(r=>{
     const p = computePagoDia(id, r.fecha, r.info.totalMins);
     r.pago = p;
     totalExtraMins += p.extraMins;
-    totalPago += p.pagoTotal;
+    totalPagoNormal += p.pagoNormal;
+    totalPagoExtra += p.pagoExtra;
   });
-  window._lastReport = { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago };
+  const laborables = rows.filter(r=>r.laborable).length;
+  const puntual = laborables>0 && faltas===0 && retardos===0;
+  const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
+  const bono = puntual ? totalPagoNormal*bonoPct : 0;
+  const totalPago = totalPagoNormal + totalPagoExtra + bono;
+
+  window._lastReport = { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct };
+  window._lastReportParams = { id, from, to };
+
   const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   let html = `
     <div class="stat-grid">
@@ -1353,6 +1388,7 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
       <div class="stat"><div class="n">${retardos}</div><div class="l">Retardos</div></div>
       <div class="stat"><div class="n">${faltas}</div><div class="l">Faltas</div></div>
       <div class="stat"><div class="n">${sueldoHora ? fmtMoney(sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
+      <div class="stat"><div class="n">${puntual ? fmtMoney(bono) : 'No aplica'}</div><div class="l">Bono de puntualidad (${Math.round(bonoPct*100)}%)</div></div>
       <div class="stat"><div class="n">${sueldoHora ? fmtMoney(totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
     </div>`;
   if(!sueldoHora){
@@ -1363,20 +1399,35 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
     const dName = dayNames[new Date(r.fecha+'T00:00:00').getDay()];
     const checks = r.info.punches.map(p=>p.hora.slice(0,5)).join(', ') || '—';
     const pares = r.info.segments.length ? r.info.segments.map(s=>`${s.inTime.slice(0,5)}–${s.outTime.slice(0,5)}`).join(', ') : '—';
+    let extraCell = '—';
+    if(r.pago.extraMins>0){
+      const authTag = r.pago.autorizado ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
+      const btnLabel = r.pago.autorizado ? 'Quitar autorización' : 'Autorizar';
+      extraCell = `<div>${fmtHM(r.pago.extraMins)}</div><div style="margin-top:3px;">${authTag}</div><button class="btn secondary small" style="margin-top:5px;" onclick="toggleAutorizacion('${id}','${r.fecha}')">${btnLabel}</button>`;
+    }
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
       <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late">impar</span>' : ''}</td>
       <td class="mono">${pares}</td>
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
-      <td class="mono">${r.pago.extraMins ? `<span class="tag late">${fmtHM(r.pago.extraMins)}</span>` : '—'}</td>
+      <td class="mono">${extraCell}</td>
       <td class="mono">${sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
       <td><span class="tag ${r.status}">${r.label}</span></td>
     </tr>`;
   });
   html += `</tbody></table>`;
-  area.innerHTML = html;
+  document.getElementById('reportArea').innerHTML = html;
   document.getElementById('btnExportReport').disabled = false;
   document.getElementById('btnPrintReport').disabled = false;
+}
+document.getElementById('btnGenReport').addEventListener('click', ()=>{
+  const id = document.getElementById('repEmpleado').value;
+  const from = document.getElementById('repDesde').value;
+  const to = document.getElementById('repHasta').value;
+  if(!id){ toast('Elige un empleado.'); return; }
+  if(!from || !to){ toast('Elige el rango de fechas.'); return; }
+  if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
+  generateEmployeeReport(id, from, to);
 });
 document.getElementById('btnExportReport').addEventListener('click', ()=>{
   const rep = window._lastReport; if(!rep) return;
@@ -1387,11 +1438,13 @@ document.getElementById('btnExportReport').addEventListener('click', ()=>{
     'Pares entrada-salida': r.info.segments.map(s=>`${s.inTime.slice(0,5)}-${s.outTime.slice(0,5)}`).join(', '),
     'Horas normales': fmtHM(r.pago.normalMins),
     'Horas extra': fmtHM(r.pago.extraMins),
+    'Extra autorizada': r.pago.extraMins>0 ? (r.pago.autorizado ? 'Sí' : 'No') : '',
     'Pago del día': rep.sueldoHora ? r.pago.pagoTotal : '',
     Estado: r.label
   }));
   data.push({});
-  data.push({ Fecha:'TOTAL', Checadas:'', 'Pares entrada-salida':'', 'Horas normales': fmtHM(rep.totalMins-rep.totalExtraMins), 'Horas extra': fmtHM(rep.totalExtraMins), 'Pago del día': rep.sueldoHora ? rep.totalPago : '', Estado: `Retardos: ${rep.retardos} · Faltas: ${rep.faltas} · Sueldo/hora: ${rep.sueldoHora || '—'}` });
+  data.push({ Fecha:'Bono puntualidad', 'Pago del día': rep.puntual ? rep.bono : 0, Estado: rep.puntual ? `Cumplió puntualidad (${Math.round(rep.bonoPct*100)}%)` : 'No aplica (tuvo falta o retardo)' });
+  data.push({ Fecha:'TOTAL', 'Pago del día': rep.sueldoHora ? rep.totalPago : '', Estado: `Retardos: ${rep.retardos} · Faltas: ${rep.faltas} · Sueldo/hora: ${rep.sueldoHora || '—'}` });
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
@@ -1550,6 +1603,7 @@ document.getElementById('btnPrintReport').addEventListener('click', ()=>{
     <div>Retardos<b>${rep.retardos}</b></div>
     <div>Faltas<b>${rep.faltas}</b></div>
     <div>Sueldo/hora<b>${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</b></div>
+    <div>Bono puntualidad<b>${rep.puntual ? fmtMoney(rep.bono) : 'No aplica'}</b></div>
     <div>Pago total<b>${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</b></div>
   </div>`;
   const tableHtml = document.getElementById('reportArea').querySelector('table').outerHTML;
