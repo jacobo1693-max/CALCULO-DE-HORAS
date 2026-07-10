@@ -1219,14 +1219,26 @@ function computeDay(id, fecha){
   } else {
     dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
   }
+  const incomplete = dayPunches.length % 2 !== 0;
   const segments = [];
-  for(let i=0;i+1<dayPunches.length;i+=2){
-    const inP = dayPunches[i], outP = dayPunches[i+1];
+  let totalMins = 0;
+  if(dayPunches.length >= 2 && incomplete){
+    // Número impar de checadas (por ejemplo una checada de más o de menos en medio del turno):
+    // en vez de perder el día completo, se toma la PRIMERA checada como entrada
+    // y la ÚLTIMA como salida final, para no descartar el turno por una checada suelta.
+    const inP = dayPunches[0], outP = dayPunches[dayPunches.length-1];
     const mins = Math.max(0, (outP.ts - inP.ts)/60000);
     segments.push({ inTime: inP.hora, outTime: outP.hora, mins });
+    totalMins = mins;
+  } else if(dayPunches.length >= 2){
+    // Número par: se empareja en bloques consecutivos (entrada/salida, entrada/salida...)
+    for(let i=0;i+1<dayPunches.length;i+=2){
+      const inP = dayPunches[i], outP = dayPunches[i+1];
+      const mins = Math.max(0, (outP.ts - inP.ts)/60000);
+      segments.push({ inTime: inP.hora, outTime: outP.hora, mins });
+    }
+    totalMins = segments.reduce((s,x)=>s+x.mins,0);
   }
-  const incomplete = dayPunches.length % 2 !== 0;
-  const totalMins = segments.reduce((s,x)=>s+x.mins,0);
   return { punches: dayPunches, segments, totalMins, incomplete };
 }
 function getSueldoHora(id){
@@ -1526,7 +1538,7 @@ function reportTableHtml(rep){
     }
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
-      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late">impar</span>' : ''}</td>
+      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}</td>
       <td class="mono">${pares}</td>
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
