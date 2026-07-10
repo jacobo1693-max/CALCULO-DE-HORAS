@@ -238,6 +238,16 @@
     <p class="sub">Registra los datos de cada empleado. El <b>número de empleado</b> debe coincidir con el ID que usa el checador para poder cruzar las checadas.</p>
 
     <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Importar lista desde el checador</label>
+          <input type="file" id="userDatInput" accept=".dat,.txt">
+        </div>
+        <span class="sub" style="margin:0; max-width:480px;">Sube el archivo <b>user.dat</b> que exporta el checador (trae número de empleado y nombre). Si un número ya existe en tu directorio, solo se actualiza el nombre — no toca foto, sueldo, turno ni los demás datos que ya capturaste.</span>
+      </div>
+    </div>
+
+    <div class="form-card">
       <input type="hidden" id="empEditingKey" value="">
       <div class="row">
         <div class="field" style="min-width:220px;">
@@ -604,22 +614,44 @@ function parseCombined(v){
   return null;
 }
 
+/* ---------- almacenamiento local del navegador ----------
+   (persiste de verdad al recargar o actualizar la página, sin depender de nada externo) */
+const LS_PREFIX = 'bm160app_';
+const storage = {
+  async get(key){
+    try{
+      const raw = localStorage.getItem(LS_PREFIX+key);
+      return raw===null ? null : { key, value: raw };
+    }catch(e){ return null; }
+  },
+  async set(key, value){
+    try{
+      localStorage.setItem(LS_PREFIX+key, value);
+      return { key, value };
+    }catch(e){ console.error('No se pudo guardar en el navegador (¿espacio lleno?)', e); return null; }
+  },
+  async delete(key){
+    try{ localStorage.removeItem(LS_PREFIX+key); return { key, deleted:true }; }
+    catch(e){ return null; }
+  }
+};
+
 /* ---------- storage ---------- */
 async function saveStorage(){
   try{
-    await window.storage.set('bm160-punches', JSON.stringify(PUNCHES), false);
-    await window.storage.set('bm160-config', JSON.stringify(CONFIG), false);
-    await window.storage.set('bm160-employees', JSON.stringify(EMPLOYEES), false);
-    await window.storage.set('bm160-turnos', JSON.stringify(TURNOS), false);
-    await window.storage.set('bm160-codigos', JSON.stringify(CODIGOS), false);
-    await window.storage.set('bm160-autorizaciones', JSON.stringify(AUTORIZACIONES), false);
+    await storage.set('bm160-punches', JSON.stringify(PUNCHES), false);
+    await storage.set('bm160-config', JSON.stringify(CONFIG), false);
+    await storage.set('bm160-employees', JSON.stringify(EMPLOYEES), false);
+    await storage.set('bm160-turnos', JSON.stringify(TURNOS), false);
+    await storage.set('bm160-codigos', JSON.stringify(CODIGOS), false);
+    await storage.set('bm160-autorizaciones', JSON.stringify(AUTORIZACIONES), false);
   }catch(e){ console.error('storage error', e); }
 }
 async function loadStorage(){
-  try{ const p = await window.storage.get('bm160-punches', false); if(p&&p.value) PUNCHES = JSON.parse(p.value); }catch(e){ PUNCHES=[]; }
-  try{ const c = await window.storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
-  try{ const e2 = await window.storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
-  try{ const t = await window.storage.get('bm160-turnos', false); if(t&&t.value) TURNOS = JSON.parse(t.value); }catch(e){ TURNOS=[]; }
+  try{ const p = await storage.get('bm160-punches', false); if(p&&p.value) PUNCHES = JSON.parse(p.value); }catch(e){ PUNCHES=[]; }
+  try{ const c = await storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
+  try{ const e2 = await storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
+  try{ const t = await storage.get('bm160-turnos', false); if(t&&t.value) TURNOS = JSON.parse(t.value); }catch(e){ TURNOS=[]; }
   // migración: turnos guardados con el formato viejo (un solo horario para todos los días)
   TURNOS = TURNOS.map(t=>{
     if(!t.dias){
@@ -631,8 +663,8 @@ async function loadStorage(){
     }
     return t;
   });
-  try{ const cod = await window.storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
-  try{ const az = await window.storage.get('bm160-autorizaciones', false); if(az&&az.value) AUTORIZACIONES = JSON.parse(az.value); }catch(e){ AUTORIZACIONES={}; }
+  try{ const cod = await storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
+  try{ const az = await storage.get('bm160-autorizaciones', false); if(az&&az.value) AUTORIZACIONES = JSON.parse(az.value); }catch(e){ AUTORIZACIONES={}; }
   applyConfigToForm();
   buildTurDiasRows(null);
   renderEmployeesTable();
@@ -806,13 +838,66 @@ document.getElementById('btnClearAll').addEventListener('click', async ()=>{
   if(!confirm('¿Borrar TODOS los datos guardados (checadas, empleados, turnos y códigos)? Esta acción no se puede deshacer.')) return;
   PUNCHES=[]; EMPLOYEES=[]; TURNOS=[]; CODIGOS=[];
   try{
-    await window.storage.delete('bm160-punches', false);
-    await window.storage.delete('bm160-employees', false);
-    await window.storage.delete('bm160-turnos', false);
-    await window.storage.delete('bm160-codigos', false);
+    await storage.delete('bm160-punches', false);
+    await storage.delete('bm160-employees', false);
+    await storage.delete('bm160-turnos', false);
+    await storage.delete('bm160-codigos', false);
   }catch(e){}
   renderEmployeesTable(); renderTurnosTable(); renderCodigosTable(); refreshAllEmployeeSelects();
   toast('Datos borrados.');
+});
+
+/* ---------- importar lista de empleados desde user.dat (formato binario del checador) ---------- */
+function bytesToText(bytes){
+  let end = bytes.indexOf(0);
+  if(end===-1) end = bytes.length;
+  let s = '';
+  for(let i=0;i<end;i++) s += String.fromCharCode(bytes[i]);
+  return s.trim();
+}
+function parseUserDat(arrayBuffer){
+  const view = new Uint8Array(arrayBuffer);
+  const REC = 72; // tamaño de registro típico del checador (ZKTeco/BM160)
+  if(view.length < REC || view.length % REC !== 0) return null;
+  const n = view.length / REC;
+  const out = [];
+  for(let i=0;i<n;i++){
+    const rec = view.subarray(i*REC, (i+1)*REC);
+    const nombre = bytesToText(rec.subarray(11,35));
+    const pin = bytesToText(rec.subarray(48,56));
+    if(pin) out.push({ pin, nombre });
+  }
+  return out;
+}
+document.getElementById('userDatInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    const parsed = parseUserDat(evt.target.result);
+    if(!parsed || !parsed.length){
+      toast('No se pudo leer el archivo como lista de empleados del checador. Verifica que sea el user.dat correcto.');
+      return;
+    }
+    let nuevos=0, actualizados=0;
+    parsed.forEach(p=>{
+      const idx = EMPLOYEES.findIndex(x=>x.id===p.pin);
+      if(idx>-1){
+        if(p.nombre && EMPLOYEES[idx].nombre !== p.nombre){
+          EMPLOYEES[idx].nombre = p.nombre;
+          actualizados++;
+        }
+      } else {
+        EMPLOYEES.push({ id:p.pin, nombre: p.nombre || p.pin, fecha:'', depto:'', sueldoHora:0, turnoId:'', codigoId:'', foto:'' });
+        nuevos++;
+      }
+    });
+    saveStorage();
+    renderEmployeesTable();
+    refreshAllEmployeeSelects();
+    toast(`Listo: ${nuevos} empleados nuevos, ${actualizados} nombres actualizados.`);
+    e.target.value = '';
+  };
+  reader.readAsArrayBuffer(file);
 });
 
 /* ---------- empleados ---------- */
