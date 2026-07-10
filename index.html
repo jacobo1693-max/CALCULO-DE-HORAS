@@ -323,7 +323,7 @@
           <div class="field"><label>Tolerancia (min)</label><input type="number" id="turTolerancia2" value="10" min="0"></div>
         </div>
         <h3>Horario por día</h3>
-        <p class="sub">Si un día tiene comida partida, llena "Salida a comer" y "Regreso". Si no aplica, déjalos vacíos. Puedes poner un horario distinto en cada día — por ejemplo, que el sábado salga más tarde para completar tus horas de la semana sin que se cuente como hora extra: ese tiempo ya forma parte de su jornada normal de ese día.</p>
+        <p class="sub">Si un día tiene comida partida, llena "Salida a comer" y "Regreso". Si no aplica, déjalos vacíos. Puedes poner un horario distinto en cada día — por ejemplo, que el sábado salga más tarde para completar tus horas de la semana sin que se cuente como hora extra: ese tiempo ya forma parte de su jornada normal de ese día. <b>Turnos nocturnos:</b> si el turno cruza la medianoche (ej. entra 17:00 y sale 01:00 del día siguiente), simplemente pon la hora de salida tal cual ("01:00") — el sistema entiende que es al día siguiente.</p>
         <div style="overflow-x:auto;">
         <table id="turDiasTable">
           <thead><tr><th>Día</th><th>Laborable</th><th>Entrada</th><th>Salida a comer</th><th>Regreso</th><th>Salida final</th><th>Horas del día</th></tr></thead>
@@ -541,6 +541,12 @@ function toast(msg){
   clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove('show'), 2600);
 }
 function pad(n){ return String(n).padStart(2,'0'); }
+function compareIdsNumeric(a,b){
+  const na = parseInt(a,10), nb = parseInt(b,10);
+  if(!isNaN(na) && !isNaN(nb) && na!==nb) return na-nb;
+  return String(a).localeCompare(String(b));
+}
+function sortIdsNumeric(ids){ return [...ids].sort(compareIdsNumeric); }
 function fmtHM(mins){
   const sign = mins<0 ? '-' : '';
   mins = Math.abs(Math.round(mins));
@@ -1013,8 +1019,9 @@ function deleteEmployee(id){
 function renderEmployeesTable(){
   const area = document.getElementById('employeesTableArea');
   if(!EMPLOYEES.length){ area.innerHTML = emptyState('Aún no hay empleados registrados en el directorio.'); return; }
+  const sorted = [...EMPLOYEES].sort((a,b)=>compareIdsNumeric(a.id,b.id));
   let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th></th></tr></thead><tbody>`;
-  EMPLOYEES.forEach(e=>{
+  sorted.forEach(e=>{
     const turno = TURNOS.find(t=>t.id===e.turnoId);
     const codigo = CODIGOS.find(c=>c.id===e.codigoId);
     html += `<tr>
@@ -1041,7 +1048,14 @@ function minsBetween(t1,t2){
   if(!t1 || !t2) return 0;
   const [h1,m1] = t1.split(':').map(Number);
   const [h2,m2] = t2.split(':').map(Number);
-  return (h2*60+m2)-(h1*60+m1);
+  let diff = (h2*60+m2)-(h1*60+m1);
+  if(diff < 0) diff += 24*60; // el horario cruza la medianoche (ej. entrada 17:00, salida 01:00)
+  return diff;
+}
+function timeToMins(t){
+  if(!t) return null;
+  const [h,m] = t.split(':').map(Number);
+  return h*60+m;
 }
 function buildTurDiasRows(schedule){
   const body = document.getElementById('turDiasBody');
@@ -1194,7 +1208,17 @@ document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
 
 /* ---------- cálculo ---------- */
 function computeDay(id, fecha){
-  const dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
+  const sched = getScheduleFor(id, fecha);
+  let dayPunches;
+  if(sched.activo && sched.overnight && sched.entrada){
+    // Turno nocturno (ej. 17:00 a 01:00): la jornada de este día empieza a la hora de entrada
+    // y se extiende ~20 horas para poder incluir la salida del día siguiente.
+    const startTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
+    const endTs = startTs + 20*60*60*1000;
+    dayPunches = PUNCHES.filter(p=>p.id===id && p.ts>=startTs && p.ts<endTs).sort((a,b)=>a.ts-b.ts);
+  } else {
+    dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
+  }
   const segments = [];
   for(let i=0;i+1<dayPunches.length;i+=2){
     const inP = dayPunches[i], outP = dayPunches[i+1];
@@ -1244,13 +1268,15 @@ function getScheduleFor(id, fecha){
     const t = TURNOS.find(x=>x.id===emp.turnoId);
     if(t && t.dias && t.dias[dow]){
       const d = t.dias[dow];
-      if(!d.activo) return { activo:false, entrada:null, tolerancia:t.tolerancia||0, expectedMins:0 };
+      if(!d.activo) return { activo:false, entrada:null, tolerancia:t.tolerancia||0, expectedMins:0, overnight:false };
       const expectedMins = minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
-      return { activo:true, entrada:d.entrada||null, tolerancia:t.tolerancia||0, expectedMins };
+      const finalSalida = d.salida2 || d.salida1;
+      const overnight = !!(d.entrada && finalSalida && timeToMins(finalSalida) <= timeToMins(d.entrada));
+      return { activo:true, entrada:d.entrada||null, tolerancia:t.tolerancia||0, expectedMins, overnight };
     }
   }
   const activo = CONFIG.dias.includes(dow);
-  return { activo, entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0 };
+  return { activo, entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0, overnight:false };
 }
 function isLate(id, dayPunches, fecha){
   if(!dayPunches.length) return false;
@@ -1279,7 +1305,7 @@ function allKnownEmployeeIds(){
   const set = new Set();
   EMPLOYEES.forEach(e=>set.add(e.id));
   PUNCHES.forEach(p=>set.add(p.id));
-  return Array.from(set);
+  return sortIdsNumeric(Array.from(set));
 }
 function refreshAllEmployeeSelects(){
   const ids = allKnownEmployeeIds();
