@@ -147,11 +147,17 @@
   #printArea .print-stats{ display:flex; gap:18px; margin-bottom:14px; flex-wrap:wrap; }
   #printArea .print-stats div{ font-size:12.5px; }
   #printArea .print-stats b{ display:block; font-family:var(--mono); font-size:16px; color:var(--navy); }
+  .sig-block{ margin-top:44px; }
+  .sig-row{ display:flex; gap:60px; }
+  .sig-col{ flex:1; }
+  .sig-line{ border-top:1.4px solid var(--ink); height:0; margin-top:54px; }
+  .sig-label{ font-size:11.5px; color:var(--ink-soft); margin-top:6px; text-align:center; line-height:1.4; }
   @media print{
     body *{ visibility:hidden; }
     #printArea, #printArea *{ visibility:visible; }
     #printArea{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0; }
     #printArea button{ display:none !important; }
+    .page-break{ page-break-after: always; }
     table{ font-size:11.5px; }
     .tag{ border:1px solid currentColor; }
     @page{ margin:14mm; }
@@ -436,7 +442,7 @@
   <!-- REPORT -->
   <section class="panel" id="panel-report">
     <h2>Reporte por empleado</h2>
-    <p class="sub">Elige empleado y rango de fechas para ver horas trabajadas, retardos y faltas día por día.</p>
+    <p class="sub">Elige empleado y rango de fechas para ver horas trabajadas, retardos y faltas día por día. Si eliges "Todos los empleados", al imprimir se genera <b>una hoja por cada empleado</b>, con espacio para firma.</p>
     <div class="row">
       <div class="field">
         <label>Empleado</label>
@@ -1280,8 +1286,8 @@ function refreshAllEmployeeSelects(){
   const opts = ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
 
   const rep = document.getElementById('repEmpleado'); const repCur = rep.value;
-  rep.innerHTML = '<option value="">-- selecciona empleado --</option>' + opts;
-  if(ids.includes(repCur)) rep.value = repCur;
+  rep.innerHTML = '<option value="">-- selecciona --</option><option value="__all__">Todos los empleados (una hoja por cada uno)</option>' + opts;
+  if(repCur && (repCur==='__all__' || ids.includes(repCur))) rep.value = repCur;
 
   const cal = document.getElementById('calEmpleado'); const calCur = cal.value;
   cal.innerHTML = ids.length ? opts : '<option value="">-- sin empleados --</option>';
@@ -1431,7 +1437,7 @@ document.getElementById('btnCalNext').addEventListener('click', ()=>{
 });
 
 /* ---------- reporte por empleado ---------- */
-function generateEmployeeReport(id, from, to){
+function computeReportData(id, from, to){
   const nombre = employeeDisplayName(id);
   const days = dateRange(from, to);
   let totalMins=0, retardos=0, faltas=0;
@@ -1461,26 +1467,28 @@ function generateEmployeeReport(id, from, to){
   const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
   const bono = puntual ? totalPagoNormal*bonoPct : 0;
   const totalPago = totalPagoNormal + totalPagoExtra + bono;
-
-  window._lastReport = { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct };
-  window._lastReportParams = { id, from, to };
-
-  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  return { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct };
+}
+function reportStatsHtml(rep){
   let html = `
     <div class="stat-grid">
-      <div class="stat"><div class="n">${fmtHM(totalMins)}</div><div class="l">Horas totales</div></div>
-      <div class="stat"><div class="n">${fmtHM(totalExtraMins)}</div><div class="l">Horas extra</div></div>
-      <div class="stat"><div class="n">${retardos}</div><div class="l">Retardos</div></div>
-      <div class="stat"><div class="n">${faltas}</div><div class="l">Faltas</div></div>
-      <div class="stat"><div class="n">${sueldoHora ? fmtMoney(sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
-      <div class="stat"><div class="n">${puntual ? fmtMoney(bono) : 'No aplica'}</div><div class="l">Bono de puntualidad (${Math.round(bonoPct*100)}%)</div></div>
-      <div class="stat"><div class="n">${sueldoHora ? fmtMoney(totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
+      <div class="stat"><div class="n">${fmtHM(rep.totalMins)}</div><div class="l">Horas totales</div></div>
+      <div class="stat"><div class="n">${fmtHM(rep.totalExtraMins)}</div><div class="l">Horas extra</div></div>
+      <div class="stat"><div class="n">${rep.retardos}</div><div class="l">Retardos</div></div>
+      <div class="stat"><div class="n">${rep.faltas}</div><div class="l">Faltas</div></div>
+      <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
+      <div class="stat"><div class="n">${rep.puntual ? fmtMoney(rep.bono) : 'No aplica'}</div><div class="l">Bono de puntualidad (${Math.round(rep.bonoPct*100)}%)</div></div>
+      <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
     </div>`;
-  if(!sueldoHora){
+  if(!rep.sueldoHora){
     html += `<div class="hint">Este empleado no tiene sueldo por hora capturado — agrégalo en la pestaña <b>Empleados</b> para calcular su pago.</div>`;
   }
-  html += `<table><thead><tr><th>Fecha</th><th>Día</th><th>Checadas</th><th>Pares entrada/salida</th><th>Horas normales</th><th>Horas extra</th><th>Pago del día</th><th>Estado</th></tr></thead><tbody>`;
-  rows.forEach(r=>{
+  return html;
+}
+function reportTableHtml(rep){
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  let html = `<table><thead><tr><th>Fecha</th><th>Día</th><th>Checadas</th><th>Pares entrada/salida</th><th>Horas normales</th><th>Horas extra</th><th>Pago del día</th><th>Estado</th></tr></thead><tbody>`;
+  rep.rows.forEach(r=>{
     const dName = dayNames[new Date(r.fecha+'T00:00:00').getDay()];
     const checks = r.info.punches.map(p=>p.hora.slice(0,5)).join(', ') || '—';
     const pares = r.info.segments.length ? r.info.segments.map(s=>`${s.inTime.slice(0,5)}–${s.outTime.slice(0,5)}`).join(', ') : '—';
@@ -1488,7 +1496,7 @@ function generateEmployeeReport(id, from, to){
     if(r.pago.extraMins>0){
       const authTag = r.pago.autorizado ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
       const btnLabel = r.pago.autorizado ? 'Quitar autorización' : 'Autorizar';
-      extraCell = `<div>${fmtHM(r.pago.extraMins)}</div><div style="margin-top:3px;">${authTag}</div><button class="btn secondary small" style="margin-top:5px;" onclick="toggleAutorizacion('${id}','${r.fecha}')">${btnLabel}</button>`;
+      extraCell = `<div>${fmtHM(r.pago.extraMins)}</div><div style="margin-top:3px;">${authTag}</div><button class="btn secondary small" style="margin-top:5px;" onclick="toggleAutorizacion('${rep.id}','${r.fecha}')">${btnLabel}</button>`;
     }
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
@@ -1496,11 +1504,54 @@ function generateEmployeeReport(id, from, to){
       <td class="mono">${pares}</td>
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
-      <td class="mono">${sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
+      <td class="mono">${rep.sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
       <td><span class="tag ${r.status}">${r.label}</span></td>
     </tr>`;
   });
   html += `</tbody></table>`;
+  return html;
+}
+function signatureBlockHtml(nombre, id){
+  return `<div class="sig-block"><div class="sig-row">
+    <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Firma del empleado<br>${nombre} (${id})</div></div>
+    <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Firma de Recursos Humanos</div></div>
+  </div></div>`;
+}
+function generateEmployeeReport(id, from, to){
+  const data = computeReportData(id, from, to);
+  window._lastReport = data;
+  window._lastReportAll = null;
+  window._lastReportParams = { id, from, to };
+  document.getElementById('reportArea').innerHTML = reportStatsHtml(data) + reportTableHtml(data);
+  document.getElementById('btnExportReport').disabled = false;
+  document.getElementById('btnPrintReport').disabled = false;
+}
+function generateAllEmployeesReport(from, to){
+  const ids = allKnownEmployeeIds();
+  if(!ids.length){ toast('No hay empleados registrados todavía.'); return; }
+  const all = ids.map(id=>computeReportData(id, from, to));
+  window._lastReportAll = all;
+  window._lastReport = null;
+  window._lastReportParams = null;
+
+  let grand = 0, anySueldo = false;
+  let html = `<div class="hint">Mostrando el resumen de ${all.length} empleados. Al imprimir, cada empleado sale en su propia hoja, con espacio para firma.</div>
+    <table><thead><tr><th>Empleado</th><th>No.</th><th>Horas totales</th><th>Horas extra</th><th>Retardos</th><th>Faltas</th><th>Bono</th><th>Pago total</th></tr></thead><tbody>`;
+  all.forEach(d=>{
+    if(d.sueldoHora) anySueldo = true;
+    grand += d.totalPago;
+    const bonoCell = d.puntual ? (d.sueldoHora ? fmtMoney(d.bono) : 'Puntual') : '—';
+    html += `<tr>
+      <td><b>${d.nombre}</b></td><td class="mono">${d.id}</td>
+      <td class="mono">${fmtHM(d.totalMins)}</td>
+      <td class="mono">${d.totalExtraMins ? fmtHM(d.totalExtraMins) : '—'}</td>
+      <td>${d.retardos ? `<span class="tag late">${d.retardos}</span>` : '<span class="tag ok">0</span>'}</td>
+      <td>${d.faltas ? `<span class="tag absent">${d.faltas}</span>` : '<span class="tag ok">0</span>'}</td>
+      <td class="mono">${bonoCell}</td>
+      <td class="mono"><b>${d.sueldoHora ? fmtMoney(d.totalPago) : '—'}</b></td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr><td colspan="7" style="text-align:right; font-weight:700;">Total general</td><td class="mono"><b>${anySueldo ? fmtMoney(grand) : '—'}</b></td></tr></tfoot></table>`;
   document.getElementById('reportArea').innerHTML = html;
   document.getElementById('btnExportReport').disabled = false;
   document.getElementById('btnPrintReport').disabled = false;
@@ -1512,10 +1563,10 @@ document.getElementById('btnGenReport').addEventListener('click', ()=>{
   if(!id){ toast('Elige un empleado.'); return; }
   if(!from || !to){ toast('Elige el rango de fechas.'); return; }
   if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
-  generateEmployeeReport(id, from, to);
+  if(id==='__all__') generateAllEmployeesReport(from, to);
+  else generateEmployeeReport(id, from, to);
 });
-document.getElementById('btnExportReport').addEventListener('click', ()=>{
-  const rep = window._lastReport; if(!rep) return;
+function reportRowsForExcel(rep){
   const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const data = rep.rows.map(r=>({
     Fecha: r.fecha, Dia: dayNames[new Date(r.fecha+'T00:00:00').getDay()],
@@ -1530,7 +1581,29 @@ document.getElementById('btnExportReport').addEventListener('click', ()=>{
   data.push({});
   data.push({ Fecha:'Bono puntualidad', 'Pago del día': rep.puntual ? rep.bono : 0, Estado: rep.puntual ? `Cumplió puntualidad (${Math.round(rep.bonoPct*100)}%)` : 'No aplica (tuvo falta o retardo)' });
   data.push({ Fecha:'TOTAL', 'Pago del día': rep.sueldoHora ? rep.totalPago : '', Estado: `Retardos: ${rep.retardos} · Faltas: ${rep.faltas} · Sueldo/hora: ${rep.sueldoHora || '—'}` });
-  const ws = XLSX.utils.json_to_sheet(data);
+  return data;
+}
+function safeSheetName(name){
+  return (name || 'Hoja').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31) || 'Hoja';
+}
+document.getElementById('btnExportReport').addEventListener('click', ()=>{
+  if(window._lastReportAll){
+    const all = window._lastReportAll;
+    const wb = XLSX.utils.book_new();
+    const used = new Set();
+    all.forEach(rep=>{
+      let base = safeSheetName(`${rep.id}_${rep.nombre}`);
+      let name = base, i=1;
+      while(used.has(name)){ name = safeSheetName(base.slice(0,28)+'_'+i); i++; }
+      used.add(name);
+      const ws = XLSX.utils.json_to_sheet(reportRowsForExcel(rep));
+      XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+    XLSX.writeFile(wb, `reportes_todos_los_empleados_${all[0].from}_a_${all[0].to}.xlsx`);
+    return;
+  }
+  const rep = window._lastReport; if(!rep) return;
+  const ws = XLSX.utils.json_to_sheet(reportRowsForExcel(rep));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
   XLSX.writeFile(wb, `reporte_${rep.nombre.replace(/\s+/g,'_')}_${rep.from}_a_${rep.to}.xlsx`);
@@ -1681,21 +1754,27 @@ function printSection(title, subtitle, bodyHtml){
   window.print();
 }
 document.getElementById('btnPrintReport').addEventListener('click', ()=>{
+  if(window._lastReportAll){
+    const all = window._lastReportAll;
+    const parts = all.map((rep,idx)=>{
+      const breakStyle = idx < all.length-1 ? 'page-break' : '';
+      return `<div class="${breakStyle}">
+        <div class="print-head">
+          <div><h1>Reporte de asistencia</h1><p>${rep.nombre} (${rep.id}) · Del ${rep.from} al ${rep.to}</p></div>
+          <div class="print-meta">Generado el ${nowStamp()}</div>
+        </div>
+        ${reportStatsHtml(rep)}${reportTableHtml(rep)}${signatureBlockHtml(rep.nombre, rep.id)}
+      </div>`;
+    }).join('');
+    document.getElementById('printArea').innerHTML = parts;
+    window.print();
+    return;
+  }
   const rep = window._lastReport; if(!rep) return;
-  const statsHtml = `<div class="print-stats">
-    <div>Horas totales<b>${fmtHM(rep.totalMins)}</b></div>
-    <div>Horas extra<b>${fmtHM(rep.totalExtraMins)}</b></div>
-    <div>Retardos<b>${rep.retardos}</b></div>
-    <div>Faltas<b>${rep.faltas}</b></div>
-    <div>Sueldo/hora<b>${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</b></div>
-    <div>Bono puntualidad<b>${rep.puntual ? fmtMoney(rep.bono) : 'No aplica'}</b></div>
-    <div>Pago total<b>${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</b></div>
-  </div>`;
-  const tableHtml = document.getElementById('reportArea').querySelector('table').outerHTML;
   printSection(
     'Reporte de asistencia',
     `${rep.nombre} (${rep.id}) · Del ${rep.from} al ${rep.to}`,
-    statsHtml + tableHtml
+    reportStatsHtml(rep) + reportTableHtml(rep) + signatureBlockHtml(rep.nombre, rep.id)
   );
 });
 document.getElementById('btnPrintWeek').addEventListener('click', ()=>{
