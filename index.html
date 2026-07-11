@@ -700,6 +700,12 @@
         </div>
       </div>
       <div class="row" style="margin-top:14px;">
+        <div class="field" style="min-width:100%;">
+          <label>Giro / objeto social (para contratos, punto 2 de generalidades)</label>
+          <input type="text" id="cfgGiro" placeholder="Ej. Comercio al por menor de pintura, recubrimientos, barnices..." style="width:100%;">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
         <div class="field">
           <label>Logotipo</label>
           <div class="photo-picker">
@@ -885,7 +891,7 @@
 <script>
 /* ---------- estado ---------- */
 let PUNCHES = [];
-let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'', empresaLugar:'', rfc:'', curp:'', telefono:'', empresaLogo:'' };
+let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'', empresaLugar:'', rfc:'', curp:'', telefono:'', empresaLogo:'', giro:'' };
 let EMPLOYEES = [];   // {id, nombre, fecha, depto, turnoId, codigoId, foto}
 let TURNOS = [];      // {id, nombre, entrada, salida, tolerancia}
 let CODIGOS = [];     // {id, clave, nombre}
@@ -1070,6 +1076,7 @@ function applyConfigToForm(){
   document.getElementById('cfgCURP').value = CONFIG.curp || '';
   document.getElementById('cfgTelefono').value = CONFIG.telefono || '';
   document.getElementById('cfgLugar').value = CONFIG.empresaLugar || '';
+  document.getElementById('cfgGiro').value = CONFIG.giro || '';
   if(CONFIG.empresaLogo){
     document.getElementById('cfgLogoPreview').src = CONFIG.empresaLogo;
     document.getElementById('cfgLogoPreview').style.display = 'inline-block';
@@ -1729,6 +1736,7 @@ document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.curp = document.getElementById('cfgCURP').value.trim();
   CONFIG.telefono = document.getElementById('cfgTelefono').value.trim();
   CONFIG.empresaLugar = document.getElementById('cfgLugar').value.trim();
+  CONFIG.giro = document.getElementById('cfgGiro').value.trim();
   if(PENDING_LOGO){ CONFIG.empresaLogo = PENDING_LOGO; PENDING_LOGO = null; }
   CONFIG.entrada = document.getElementById('cfgEntrada').value || '08:00';
   CONFIG.tolerancia = +document.getElementById('cfgTolerancia').value || 0;
@@ -2490,7 +2498,7 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
       <p>Que celebran por una parte la empresa denominada <b>${empresaTxt}</b>, y por la otra el C. <b>${nombreEmp}</b>, bajo las siguientes generalidades y cláusulas:</p>
       <p style="text-align:center; margin-top:14px;"><b>G E N E R A L I D A D E S</b></p>
       <p><b>1.-</b> <b>${empresaTxt}</b>, es una persona física debidamente registrada ante el SAT, teniendo su domicilio en ${domicilioTxt}, con Registro Federal de Contribuyentes <b>${rfcPatron}</b>, con CURP <b>${curpPatron}</b> y por tal con capacidad para obligarse, y a quien en lo sucesivo y para los efectos del presente contrato, se le denominará <b>PATRÓN</b>.</p>
-      <p><b>2.-</b> El PATRÓN para la consecución de su objeto social, requiere contar con personal para el desarrollo de sus actividades.</p>
+      <p><b>2.-</b> El PATRÓN para la consecución de su objeto social, le es necesario tener personal por contar con ${CONFIG.giro || '________________________________'}</p>
       <p><b>3.-</b> C. <b>${nombreEmp}</b> manifiesta llamarse como ha quedado escrito, tener la nacionalidad mexicana, haber nacido el <b>${fechaNacTxt}</b>, sexo <b>${sexoTxt}</b>, estado civil <b>${estadoCivilTxt}</b>, con domicilio en <b>${domicilioEmpTxt}</b>, con Clave Única de Registro de Población <b>${curpEmpTxt}</b> y Registro Federal de Contribuyentes <b>${rfcEmpTxt}</b>, acudiendo a la celebración del presente contrato por sus propios derechos, y a quien en lo sucesivo y para los efectos del mismo se le denominará <b>TRABAJADOR</b>.</p>
       <p><b>4.-</b> El TRABAJADOR manifiesta contar con la experiencia y conocimientos necesarios para desempeñar el servicio especializado que requiere el PATRÓN, dentro de las áreas que se describen en la cláusula segunda del presente contrato.</p>
       <p><b>5.-</b> El TRABAJADOR da su consentimiento en desempeñar los requerimientos del PATRÓN y en aceptar las condiciones generales de trabajo sobre las cuales presentará sus servicios personales, en el domicilio del Patrón y en los que designe en forma temporal.</p>
@@ -2518,7 +2526,8 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
       <p><b>DÉCIMA NOVENA.</b>- Ambas partes observarán las disposiciones en materia de Capacitación y Adiestramiento que dicten las autoridades competentes.</p>
       <p><b>VIGÉSIMA.</b>- Será obligatorio para el trabajador dar aviso al patrón con treinta días de anticipación cuando pretenda renunciar, así como comunicar cualquier cambio de domicilio u otra relación laboral.</p>
       <p><b>VIGÉSIMA PRIMERA.</b>- Conforme al artículo 501 de la Ley Federal del Trabajo, el trabajador designa como beneficiario a: <b>${beneficiarioTxt}</b>, con parentesco <b>${parentescoTxt}</b>, para el pago de salarios y prestaciones devengadas no cobradas en caso de fallecimiento o desaparición.</p>
-      <p><b>VIGÉSIMA SEGUNDA.</b>- El TRABAJADOR reconoce que con motivo de sus funciones tiene acceso a información confidencial y/o secretos industriales del PATRÓN y/o sus clientes, obligándose a no divulgarlos ni utilizarlos en su provecho o de terceros, durante y después de la relación laboral.</p>
+      <p><b>VIGÉSIMA SEGUNDA.</b>- Con motivo de las funciones desarrolladas, EL EMPLEADO reconoce que tiene acceso a información privilegiada incluyendo secretos comerciales, de diseño, comercialización y a diversa información y documentación de carácter confidencial y exclusivo de EL PATRÓN y/o de sus clientes y/o de terceros, debiéndose entender como información confidencial la información de cualquier carácter o naturaleza, propiedad de EL PATRÓN, y/o sus clientes y/o de terceros, incluyendo en forma enunciativa y no limitativa, información de carácter económico, financiero, bancario, proveedores, clientes, técnico, montos de consumo de servicios tales como luz, agua, gas, teléfono, procesos de operación, contacto de clientes, materias primas, sistemas, bases de datos, estadísticas, prácticas, estrategias, metodología, políticas, planes, proyecciones y cualquier otra que sea necesaria para el desarrollo de los Proyectos; así mismo se deberá entender por secretos industriales aquella información que cumpla con todos los requisitos de la legislación aplicable para dicha información, entre otras la información de aplicación industrial o comercial que guarde EL PATRÓN, y/o sus clientes y/o terceros, con carácter confidencial, que les signifique obtener o mantener una ventaja competitiva o económica frente a terceros en la realización de sus actividades económicas y respecto de la cual hayan adoptado los medios o sistemas suficientes para preservar su confidencialidad y el acceso restringido a la misma y se refiera necesariamente a la naturaleza, características o finalidades de los productos, métodos o procesos de producción, medios o formas de distribución o comercialización de productos o prestación de servicios.</p>
+      <p>En virtud de lo anterior, EL TRABAJADOR se obliga sin limitación alguna a no divulgar, ni utilizar en su provecho o de terceros, la Información Confidencial y/o los Secretos Industriales que en su caso conozca de EL PATRÓN y/o de sus clientes y/o de terceros, así como de los hechos o esencia de todas las actividades que realizará con motivo de la colaboración con EL PATRÓN, en la realización de los Proyectos y en general en la realización de sus actividades laborales, y asimismo se obliga a no publicar, revelar o divulgar por cualquier medio y abstenerse de realizar cualquier declaración pública o divulgación particular, presente o futura al respecto y en relación directa o indirecta con la Información Confidencial y/o los Secretos Industriales y en general con toda la información de cualquier naturaleza que le fuera revelada o conozca con motivo del desarrollo de los Proyectos y en general la realización de sus labores.</p>
 
       <p style="margin-top:18px;">AMBAS PARTES, ENTERADAS DEL CONTENIDO Y ALCANCE DE LAS CLÁUSULAS QUE CONTIENE EL PRESENTE CONTRATO, LO FIRMAN DE ENTERA CONFORMIDAD, HACIÉNDOLO EN PRESENCIA DE DOS PERSONAS QUE COMO TESTIGOS COMPARECEN A LA FIRMA DEL PRESENTE CONTRATO.</p>
 
@@ -2529,6 +2538,13 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
       <div class="sig-row" style="margin-top:46px;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
+      </div>
+
+      <p style="margin-top:44px; text-align:justify;">Expreso por medio de este documento que la empresa ${empresaTxt} me proporciono el contrato individual de trabajo original debidamente firmado, así como el reglamento interior de trabajo, y que estoy de acuerdo en cumplir con sus disposiciones, asi como las de orden tecnico y adminstrativo que dicte la empresa ya sea en el momento de mi entrada a esta, o en forma posterior.</p>
+      <div style="margin-top:50px; text-align:center;">
+        <div>${nombreEmp}</div>
+        <div class="sig-line" style="max-width:280px; margin:44px auto 0;"></div>
+        <div class="sig-label">Nombre, Firma y huella</div>
       </div>
     </div>
   `;
