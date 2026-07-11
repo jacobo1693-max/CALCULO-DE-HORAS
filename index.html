@@ -2486,15 +2486,15 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
   const logoBlock = (CONFIG.empresaLogo || CONFIG.empresaNombre) ? `<div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:16px;">
       ${CONFIG.empresaLogo ? `<img src="${CONFIG.empresaLogo}" style="width:46px; height:46px; object-fit:contain; border-radius:8px;">` : ''}
       <div style="text-align:left;">
-        ${CONFIG.empresaNombre ? `<div style="font-family:var(--display); font-weight:700; font-size:13.5px; color:var(--navy);">${CONFIG.empresaNombre}</div>` : ''}
-        ${CONFIG.rfc ? `<div style="font-size:10px; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
+        ${CONFIG.empresaNombre ? `<div style="font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:13pt; color:var(--navy);">${CONFIG.empresaNombre}</div>` : ''}
+        ${CONFIG.rfc ? `<div style="font-size:9pt; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
       </div>
     </div>` : '';
 
   return `
-    <div class="pagina-oficio" style="max-width:760px; margin:0 auto; font-size:12.5px; line-height:1.65; text-align:justify;">
+    <div class="pagina-oficio" style="max-width:760px; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
       ${logoBlock}
-      <h1 style="text-align:center; font-family:var(--display); font-size:17px; letter-spacing:.04em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
+      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15pt; letter-spacing:.03em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
       <p>Que celebran por una parte la empresa denominada <b>${empresaTxt}</b>, y por la otra el C. <b>${nombreEmp}</b>, bajo las siguientes generalidades y cláusulas:</p>
       <p style="text-align:center; margin-top:14px;"><b>G E N E R A L I D A D E S</b></p>
       <p><b>1.-</b> <b>${empresaTxt}</b>, es una persona física debidamente registrada ante el SAT, teniendo su domicilio en ${domicilioTxt}, con Registro Federal de Contribuyentes <b>${rfcPatron}</b>, con CURP <b>${curpPatron}</b> y por tal con capacidad para obligarse, y a quien en lo sucesivo y para los efectos del presente contrato, se le denominará <b>PATRÓN</b>.</p>
@@ -2531,20 +2531,22 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
 
       <p style="margin-top:18px;">AMBAS PARTES, ENTERADAS DEL CONTENIDO Y ALCANCE DE LAS CLÁUSULAS QUE CONTIENE EL PRESENTE CONTRATO, LO FIRMAN DE ENTERA CONFORMIDAD, HACIÉNDOLO EN PRESENCIA DE DOS PERSONAS QUE COMO TESTIGOS COMPARECEN A LA FIRMA DEL PRESENTE CONTRATO.</p>
 
-      <div class="sig-row" style="margin-top:46px;">
+      <div class="sig-row" style="margin-top:46px; page-break-inside: avoid; break-inside: avoid;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>PATRÓN</b><br>${empresaTxt}</div></div>
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR</b><br>${nombreEmp}</div></div>
       </div>
-      <div class="sig-row" style="margin-top:46px;">
+      <div class="sig-row" style="margin-top:46px; page-break-inside: avoid; break-inside: avoid;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
       </div>
 
-      <p style="margin-top:44px; text-align:justify;">Expreso por medio de este documento que la empresa ${empresaTxt} me proporciono el contrato individual de trabajo original debidamente firmado, así como el reglamento interior de trabajo, y que estoy de acuerdo en cumplir con sus disposiciones, asi como las de orden tecnico y adminstrativo que dicte la empresa ya sea en el momento de mi entrada a esta, o en forma posterior.</p>
-      <div style="margin-top:50px; text-align:center;">
-        <div>${nombreEmp}</div>
-        <div class="sig-line" style="max-width:280px; margin:44px auto 0;"></div>
-        <div class="sig-label">Nombre, Firma y huella</div>
+      <div style="page-break-inside: avoid; break-inside: avoid;">
+        <p style="margin-top:44px; text-align:justify;">Expreso por medio de este documento que la empresa ${empresaTxt} me proporciono el contrato individual de trabajo original debidamente firmado, así como el reglamento interior de trabajo, y que estoy de acuerdo en cumplir con sus disposiciones, asi como las de orden tecnico y adminstrativo que dicte la empresa ya sea en el momento de mi entrada a esta, o en forma posterior.</p>
+        <div style="margin-top:50px; text-align:center;">
+          <div>${nombreEmp}</div>
+          <div class="sig-line" style="max-width:280px; margin:44px auto 0;"></div>
+          <div class="sig-label">Nombre, Firma y huella</div>
+        </div>
       </div>
     </div>
   `;
