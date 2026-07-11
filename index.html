@@ -2499,9 +2499,9 @@ function contratoHtml(emp, tipo, pago, sueldoDiario, fechaCelebracion){
     </div>` : '';
 
   return `
-    <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:13pt; line-height:1.5; text-align:justify;">
+    <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
       ${logoBlock}
-      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:17pt; letter-spacing:.03em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
+      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15pt; letter-spacing:.03em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
       <p>Que celebran por una parte la empresa denominada <b>${empresaTxt}</b>, y por la otra el C. <b>${nombreEmp}</b>, bajo las siguientes generalidades y cláusulas:</p>
       <p style="text-align:center; margin-top:14px;"><b>G E N E R A L I D A D E S</b></p>
       <p><b>1.-</b> <b>${empresaTxt}</b>, es una persona física debidamente registrada ante el SAT, teniendo su domicilio en ${domicilioTxt}, con Registro Federal de Contribuyentes <b>${rfcPatron}</b>, con CURP <b>${curpPatron}</b> y por tal con capacidad para obligarse, y a quien en lo sucesivo y para los efectos del presente contrato, se le denominará <b>PATRÓN</b>.</p>
@@ -2547,7 +2547,7 @@ function contratoHtml(emp, tipo, pago, sueldoDiario, fechaCelebracion){
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
       </div>
 
-      <div style="page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid;">
+      <div style="page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; font-size:12pt; font-weight:bold;">
         <p style="margin-top:44px; text-align:justify;">Expreso por medio de este documento que la empresa ${empresaTxt} me proporciono el contrato individual de trabajo original debidamente firmado, así como el reglamento interior de trabajo, y que estoy de acuerdo en cumplir con sus disposiciones, asi como las de orden tecnico y adminstrativo que dicte la empresa ya sea en el momento de mi entrada a esta, o en forma posterior.</p>
         <div style="margin-top:50px; text-align:center;">
           <div>${nombreEmp}</div>
