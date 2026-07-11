@@ -257,7 +257,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">RH</div>
+      <div class="brand-mark" id="brandMark">RH</div>
       <div>
         <div class="brand-title" id="empresaTitulo">Mi Empresa</div>
         <div class="brand-sub">Control de Asistencia</div>
@@ -462,11 +462,11 @@
         </div>
         <div class="field">
           <label>Departamento</label>
-          <input type="text" id="empDepto" placeholder="Ej. Producción">
+          <select id="empDepto"><option value="">-- selecciona --</option></select>
         </div>
         <div class="field">
           <label>Puesto</label>
-          <input type="text" id="empPuesto" placeholder="Ej. Ayudante General">
+          <select id="empPuesto"><option value="">-- selecciona --</option></select>
         </div>
         <div class="field">
           <label>Sueldo por hora</label>
@@ -509,6 +509,8 @@
     <div class="subtabs">
       <button data-sub="turnos" class="active">Turnos</button>
       <button data-sub="codigos">Códigos de pago</button>
+      <button data-sub="departamentos">Departamentos</button>
+      <button data-sub="puestos">Puestos</button>
     </div>
 
     <div class="subpanel active" id="sub-turnos">
@@ -545,23 +547,68 @@
       </div>
       <div id="codigosTableArea"></div>
     </div>
+
+    <div class="subpanel" id="sub-departamentos">
+      <div class="form-card">
+        <div class="row">
+          <div class="field" style="min-width:260px;"><label>Nombre del departamento</label><input type="text" id="depNombre" placeholder="Ej. Ventas"></div>
+          <button class="btn" id="btnAddDepartamento">Agregar departamento</button>
+        </div>
+      </div>
+      <div id="departamentosTableArea"></div>
+    </div>
+
+    <div class="subpanel" id="sub-puestos">
+      <div class="form-card">
+        <div class="row">
+          <div class="field" style="min-width:260px;"><label>Nombre del puesto</label><input type="text" id="puestoNombre" placeholder="Ej. Ayudante General"></div>
+          <button class="btn" id="btnAddPuesto">Agregar puesto</button>
+        </div>
+      </div>
+      <div id="puestosTableArea"></div>
+    </div>
   </section>
 
   <!-- CONFIG -->
   <section class="panel" id="panel-config">
-    <h2>Configuración general de horario</h2>
-    <p class="sub">Se usa como valor por default para retardos y faltas cuando un empleado no tiene un turno específico asignado.</p>
-    <div class="row">
-      <div class="field" style="min-width:240px;">
-        <label>Nombre de la empresa</label>
-        <input type="text" id="cfgEmpresa" placeholder="Ej. Grupo Ejemplo S.A. de C.V.">
+    <h2>Datos de la empresa</h2>
+    <p class="sub">Esta información aparece automáticamente en el encabezado de todos los reportes, resúmenes y actas administrativas que imprimas.</p>
+    <div class="form-card">
+      <div class="row">
+        <div class="field" style="min-width:240px;">
+          <label>Nombre de la empresa</label>
+          <input type="text" id="cfgEmpresa" placeholder="Ej. Grupo Ejemplo S.A. de C.V.">
+        </div>
+        <div class="field">
+          <label>RFC</label>
+          <input type="text" id="cfgRFC" placeholder="Ej. GEJ850101ABC">
+        </div>
+        <div class="field">
+          <label>Teléfono</label>
+          <input type="text" id="cfgTelefono" placeholder="Ej. 625 123 4567">
+        </div>
       </div>
-      <div class="field" style="min-width:320px;">
-        <label>Domicilio / lugar (para actas administrativas)</label>
-        <input type="text" id="cfgLugar" placeholder="Ej. KM 7, Carr. a Obregón a Cuauhtémoc S/N">
+      <div class="row" style="margin-top:14px;">
+        <div class="field" style="min-width:340px;">
+          <label>Domicilio</label>
+          <input type="text" id="cfgLugar" placeholder="Ej. KM 7, Carr. a Obregón a Cuauhtémoc S/N">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div class="field">
+          <label>Logotipo</label>
+          <div class="photo-picker">
+            <img id="cfgLogoPreview" class="avatar-lg" style="display:none; border-radius:8px; object-fit:contain; background:#fff;">
+            <div id="cfgLogoPlaceholder" class="avatar-lg avatar-placeholder" style="border-radius:8px;">LOGO</div>
+            <input type="file" id="cfgLogoInput" accept="image/*">
+          </div>
+        </div>
       </div>
     </div>
-    <div class="row" style="margin-top:14px;">
+
+    <h2 style="margin-top:30px;">Configuración general de horario</h2>
+    <p class="sub">Se usa como valor por default para retardos y faltas cuando un empleado no tiene un turno específico asignado.</p>
+    <div class="row">
       <div class="field">
         <label>Hora de entrada esperada</label>
         <input type="time" id="cfgEntrada" value="08:00">
@@ -733,11 +780,15 @@
 <script>
 /* ---------- estado ---------- */
 let PUNCHES = [];
-let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'' };
+let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'', empresaLugar:'', rfc:'', telefono:'', empresaLogo:'' };
 let EMPLOYEES = [];   // {id, nombre, fecha, depto, turnoId, codigoId, foto}
 let TURNOS = [];      // {id, nombre, entrada, salida, tolerancia}
 let CODIGOS = [];     // {id, clave, nombre}
+let DEPARTAMENTOS = []; // {id, nombre}
+let PUESTOS = [];       // {id, nombre}
 let AUTORIZACIONES = {}; // { "id|fecha": true/false } — true = hora extra autorizada (default true si no existe)
+const DEPARTAMENTOS_DEFAULT = ['Recursos Humanos','Administración','Ventas','Cobrador','Operadores','Fábrica','Ventas Piso'];
+const PUESTOS_DEFAULT = ['Ayudante General','Administración'];
 let PARSED_ROWS = [];
 let HEADERS = [];
 
@@ -863,6 +914,8 @@ async function saveStorage(){
     await storage.set('bm160-employees', JSON.stringify(EMPLOYEES), false);
     await storage.set('bm160-turnos', JSON.stringify(TURNOS), false);
     await storage.set('bm160-codigos', JSON.stringify(CODIGOS), false);
+    await storage.set('bm160-departamentos', JSON.stringify(DEPARTAMENTOS), false);
+    await storage.set('bm160-puestos', JSON.stringify(PUESTOS), false);
     await storage.set('bm160-autorizaciones', JSON.stringify(AUTORIZACIONES), false);
   }catch(e){ console.error('storage error', e); }
 }
@@ -883,12 +936,24 @@ async function loadStorage(){
     return t;
   });
   try{ const cod = await storage.get('bm160-codigos', false); if(cod&&cod.value) CODIGOS = JSON.parse(cod.value); }catch(e){ CODIGOS=[]; }
+  try{
+    const dep = await storage.get('bm160-departamentos', false);
+    if(dep&&dep.value) DEPARTAMENTOS = JSON.parse(dep.value);
+    else { DEPARTAMENTOS = DEPARTAMENTOS_DEFAULT.map(n=>({id:uid(), nombre:n})); await storage.set('bm160-departamentos', JSON.stringify(DEPARTAMENTOS), false); }
+  }catch(e){ DEPARTAMENTOS = DEPARTAMENTOS_DEFAULT.map(n=>({id:uid(), nombre:n})); }
+  try{
+    const pue = await storage.get('bm160-puestos', false);
+    if(pue&&pue.value) PUESTOS = JSON.parse(pue.value);
+    else { PUESTOS = PUESTOS_DEFAULT.map(n=>({id:uid(), nombre:n})); await storage.set('bm160-puestos', JSON.stringify(PUESTOS), false); }
+  }catch(e){ PUESTOS = PUESTOS_DEFAULT.map(n=>({id:uid(), nombre:n})); }
   try{ const az = await storage.get('bm160-autorizaciones', false); if(az&&az.value) AUTORIZACIONES = JSON.parse(az.value); }catch(e){ AUTORIZACIONES={}; }
   applyConfigToForm();
   buildTurDiasRows(null);
   renderEmployeesTable();
   renderTurnosTable();
   renderCodigosTable();
+  renderDepartamentosTable();
+  renderPuestosTable();
   refreshAllEmployeeSelects();
   const now = new Date();
   document.getElementById('calMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
@@ -896,7 +961,17 @@ async function loadStorage(){
 }
 function applyConfigToForm(){
   document.getElementById('cfgEmpresa').value = CONFIG.empresaNombre || '';
+  document.getElementById('cfgRFC').value = CONFIG.rfc || '';
+  document.getElementById('cfgTelefono').value = CONFIG.telefono || '';
   document.getElementById('cfgLugar').value = CONFIG.empresaLugar || '';
+  if(CONFIG.empresaLogo){
+    document.getElementById('cfgLogoPreview').src = CONFIG.empresaLogo;
+    document.getElementById('cfgLogoPreview').style.display = 'inline-block';
+    document.getElementById('cfgLogoPlaceholder').style.display = 'none';
+  } else {
+    document.getElementById('cfgLogoPreview').style.display = 'none';
+    document.getElementById('cfgLogoPlaceholder').style.display = 'flex';
+  }
   document.getElementById('cfgEntrada').value = CONFIG.entrada;
   document.getElementById('cfgTolerancia').value = CONFIG.tolerancia;
   document.getElementById('cfgJornada').value = CONFIG.jornada;
@@ -907,6 +982,12 @@ function applyConfigToForm(){
 }
 function applyBrand(){
   document.getElementById('empresaTitulo').textContent = CONFIG.empresaNombre || 'Mi Empresa';
+  const mark = document.getElementById('brandMark');
+  if(CONFIG.empresaLogo){
+    mark.innerHTML = `<img src="${CONFIG.empresaLogo}" style="width:100%; height:100%; object-fit:contain; border-radius:8px;">`;
+  } else {
+    mark.textContent = 'RH';
+  }
 }
 
 /* ---------- tabs ---------- */
@@ -1157,6 +1238,16 @@ document.getElementById('empFotoInput').addEventListener('change', (e)=>{
     document.getElementById('empFotoPlaceholder').style.display='none';
   });
 });
+let PENDING_LOGO = null;
+document.getElementById('cfgLogoInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  resizePhoto(file, (dataUrl)=>{
+    PENDING_LOGO = dataUrl;
+    const img = document.getElementById('cfgLogoPreview');
+    img.src = dataUrl; img.style.display='inline-block';
+    document.getElementById('cfgLogoPlaceholder').style.display='none';
+  });
+});
 function refreshTurnoCodigoSelects(){
   const tSel = document.getElementById('empTurno');
   tSel.innerHTML = '<option value="">-- sin turno específico --</option>' + TURNOS.map(t=>`<option value="${t.id}">${t.nombre}</option>`).join('');
@@ -1211,13 +1302,26 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
 });
 document.getElementById('btnCancelEditEmployee').addEventListener('click', resetEmployeeForm);
 
+function ensureSelectHasOption(selectId, value){
+  if(!value) return;
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  const exists = Array.from(sel.options).some(o=>o.value===value);
+  if(!exists){
+    const opt = document.createElement('option');
+    opt.value = value; opt.textContent = value + ' (existente)';
+    sel.appendChild(opt);
+  }
+}
 function editEmployee(id){
   const emp = EMPLOYEES.find(x=>x.id===id); if(!emp) return;
   document.getElementById('empEditingKey').value = id;
   document.getElementById('empNombre').value = emp.nombre;
   document.getElementById('empId').value = emp.id;
   document.getElementById('empFecha').value = emp.fecha || '';
+  ensureSelectHasOption('empDepto', emp.depto);
   document.getElementById('empDepto').value = emp.depto || '';
+  ensureSelectHasOption('empPuesto', emp.puesto);
   document.getElementById('empPuesto').value = emp.puesto || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
   document.getElementById('empTurno').value = emp.turnoId || '';
@@ -1412,10 +1516,85 @@ function renderCodigosTable(){
   area.innerHTML = html;
 }
 
+/* ---------- departamentos ---------- */
+document.getElementById('btnAddDepartamento').addEventListener('click', ()=>{
+  const nombre = document.getElementById('depNombre').value.trim();
+  if(!nombre){ toast('Escribe el nombre del departamento.'); return; }
+  if(DEPARTAMENTOS.some(d=>d.nombre.toLowerCase()===nombre.toLowerCase())){ toast('Ese departamento ya existe.'); return; }
+  DEPARTAMENTOS.push({ id: uid(), nombre });
+  document.getElementById('depNombre').value='';
+  saveStorage(); renderDepartamentosTable();
+  toast('Departamento agregado.');
+});
+function deleteDepartamento(id){
+  DEPARTAMENTOS = DEPARTAMENTOS.filter(d=>d.id!==id);
+  saveStorage(); renderDepartamentosTable();
+}
+function renderDepartamentosTable(){
+  const area = document.getElementById('departamentosTableArea');
+  refreshDeptoPuestoSelects();
+  if(!DEPARTAMENTOS.length){ area.innerHTML = emptyState('No hay departamentos definidos todavía.'); return; }
+  let html = `<table><thead><tr><th>Departamento</th><th></th></tr></thead><tbody>`;
+  DEPARTAMENTOS.forEach(d=>{
+    html += `<tr><td><b>${d.nombre}</b></td><td><button class="btn danger small" onclick="deleteDepartamento('${d.id}')">Eliminar</button></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+
+/* ---------- puestos ---------- */
+document.getElementById('btnAddPuesto').addEventListener('click', ()=>{
+  const nombre = document.getElementById('puestoNombre').value.trim();
+  if(!nombre){ toast('Escribe el nombre del puesto.'); return; }
+  if(PUESTOS.some(p=>p.nombre.toLowerCase()===nombre.toLowerCase())){ toast('Ese puesto ya existe.'); return; }
+  PUESTOS.push({ id: uid(), nombre });
+  document.getElementById('puestoNombre').value='';
+  saveStorage(); renderPuestosTable();
+  toast('Puesto agregado.');
+});
+function deletePuesto(id){
+  PUESTOS = PUESTOS.filter(p=>p.id!==id);
+  saveStorage(); renderPuestosTable();
+}
+function renderPuestosTable(){
+  const area = document.getElementById('puestosTableArea');
+  refreshDeptoPuestoSelects();
+  if(!PUESTOS.length){ area.innerHTML = emptyState('No hay puestos definidos todavía.'); return; }
+  let html = `<table><thead><tr><th>Puesto</th><th></th></tr></thead><tbody>`;
+  PUESTOS.forEach(p=>{
+    html += `<tr><td><b>${p.nombre}</b></td><td><button class="btn danger small" onclick="deletePuesto('${p.id}')">Eliminar</button></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function refreshDeptoPuestoSelects(){
+  const dSel = document.getElementById('empDepto');
+  if(dSel){
+    const dCur = dSel.value;
+    dSel.innerHTML = '<option value="">-- selecciona --</option>' + DEPARTAMENTOS.map(d=>`<option value="${d.nombre}">${d.nombre}</option>`).join('');
+    if(dCur){
+      if(!DEPARTAMENTOS.some(d=>d.nombre===dCur)) dSel.innerHTML += `<option value="${dCur}">${dCur} (existente)</option>`;
+      dSel.value = dCur;
+    }
+  }
+  const pSel = document.getElementById('empPuesto');
+  if(pSel){
+    const pCur = pSel.value;
+    pSel.innerHTML = '<option value="">-- selecciona --</option>' + PUESTOS.map(p=>`<option value="${p.nombre}">${p.nombre}</option>`).join('');
+    if(pCur){
+      if(!PUESTOS.some(p=>p.nombre===pCur)) pSel.innerHTML += `<option value="${pCur}">${pCur} (existente)</option>`;
+      pSel.value = pCur;
+    }
+  }
+}
+
 /* ---------- config ---------- */
 document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.empresaNombre = document.getElementById('cfgEmpresa').value.trim();
+  CONFIG.rfc = document.getElementById('cfgRFC').value.trim();
+  CONFIG.telefono = document.getElementById('cfgTelefono').value.trim();
   CONFIG.empresaLugar = document.getElementById('cfgLugar').value.trim();
+  if(PENDING_LOGO){ CONFIG.empresaLogo = PENDING_LOGO; PENDING_LOGO = null; }
   CONFIG.entrada = document.getElementById('cfgEntrada').value || '08:00';
   CONFIG.tolerancia = +document.getElementById('cfgTolerancia').value || 0;
   CONFIG.jornada = +document.getElementById('cfgJornada').value || 8;
@@ -2010,9 +2189,13 @@ function nowStamp(){
   return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 function printHeadHtml(title, subtitle){
-  const empresaLine = CONFIG.empresaNombre ? `<div style="font-size:11px;color:var(--ink-soft);margin-bottom:2px;">${CONFIG.empresaNombre}</div>` : '';
+  const logoImg = CONFIG.empresaLogo ? `<img src="${CONFIG.empresaLogo}" style="width:54px; height:54px; object-fit:contain; border-radius:8px; flex-shrink:0;">` : '';
+  const empresaLine = CONFIG.empresaNombre ? `<div style="font-family:var(--display); font-weight:700; font-size:14px; color:var(--navy);">${CONFIG.empresaNombre}</div>` : '';
+  const detalles = [CONFIG.rfc ? `RFC: ${CONFIG.rfc}` : '', CONFIG.empresaLugar || '', CONFIG.telefono ? `Tel: ${CONFIG.telefono}` : ''].filter(Boolean).join(' · ');
+  const detallesLine = detalles ? `<div style="font-size:10.5px; color:var(--ink-soft); margin-top:1px;">${detalles}</div>` : '';
+  const empresaBlock = (logoImg || empresaLine) ? `<div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">${logoImg}<div>${empresaLine}${detallesLine}</div></div>` : '';
   return `<div class="print-head">
-      <div>${empresaLine}<h1>${title}</h1><p>${subtitle}</p></div>
+      <div>${empresaBlock}<h1>${title}</h1><p>${subtitle}</p></div>
       <div class="print-meta">Generado el ${nowStamp()}</div>
     </div>`;
 }
@@ -2032,6 +2215,13 @@ function actaAdministrativaHtml(id, fechaFalta){
   const dFalta = new Date(fechaFalta+'T00:00:00');
   return `
     <div style="max-width:720px; margin:0 auto; font-size:13.5px; line-height:1.75;">
+      ${CONFIG.empresaLogo || CONFIG.empresaNombre ? `<div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:14px;">
+        ${CONFIG.empresaLogo ? `<img src="${CONFIG.empresaLogo}" style="width:46px; height:46px; object-fit:contain; border-radius:8px;">` : ''}
+        <div style="text-align:left;">
+          ${CONFIG.empresaNombre ? `<div style="font-family:var(--display); font-weight:700; font-size:13.5px; color:var(--navy);">${CONFIG.empresaNombre}</div>` : ''}
+          ${CONFIG.rfc ? `<div style="font-size:10px; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
+        </div>
+      </div>` : ''}
       <h1 style="text-align:center; font-family:var(--display); font-size:19px; letter-spacing:.05em; margin-bottom:24px;">ACTA ADMINISTRATIVA</h1>
       <p><b>Fecha y Hora:</b> ${fechaLarga(now)}, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
       <p><b>Lugar:</b> ${lugar}</p>
