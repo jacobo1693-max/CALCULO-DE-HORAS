@@ -250,6 +250,8 @@
     table{ font-size:11.5px; }
     .tag{ border:1px solid currentColor; }
     @page{ margin:14mm; }
+    @page contrato{ size: 216mm 340mm; margin:14mm; }
+    .pagina-oficio{ page: contrato; }
   }
 </style>
 </head>
@@ -267,6 +269,7 @@
       <button data-tab="dashboard" class="active">Dashboard</button>
       <button data-tab="import">Importar checadas</button>
       <button data-tab="employees">Empleados</button>
+      <button data-tab="contratos">Contratos</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -491,6 +494,65 @@
           </div>
         </div>
       </div>
+
+      <h3 style="margin-top:20px; margin-bottom:8px;">Datos para contrato (opcional)</h3>
+      <p class="sub" style="margin-bottom:10px;">Se usan para generar el contrato de trabajo en la pestaña "Contratos".</p>
+      <div class="row">
+        <div class="field">
+          <label>Fecha de nacimiento</label>
+          <input type="date" id="empFechaNac">
+        </div>
+        <div class="field">
+          <label>Sexo</label>
+          <select id="empSexo">
+            <option value="">-- selecciona --</option>
+            <option value="MASCULINO">Masculino</option>
+            <option value="FEMENINO">Femenino</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Estado civil</label>
+          <select id="empEstadoCivil">
+            <option value="">-- selecciona --</option>
+            <option value="SOLTERO(A)">Soltero(a)</option>
+            <option value="CASADO(A)">Casado(a)</option>
+            <option value="UNIÓN LIBRE">Unión libre</option>
+            <option value="DIVORCIADO(A)">Divorciado(a)</option>
+            <option value="VIUDO(A)">Viudo(a)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div class="field" style="min-width:280px;">
+          <label>Domicilio del empleado</label>
+          <input type="text" id="empDomicilio" placeholder="Calle, número, colonia, C.P.">
+        </div>
+        <div class="field">
+          <label>CURP</label>
+          <input type="text" id="empCurp" placeholder="Ej. MEAJ901204HCHRNT03">
+        </div>
+        <div class="field">
+          <label>RFC</label>
+          <input type="text" id="empRfc" placeholder="Ej. MEAJ901204TK1">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div class="field" style="min-width:100%;">
+          <label>Funciones del puesto (cláusula segunda)</label>
+          <input type="text" id="empFunciones" placeholder="Describe brevemente las funciones que desempeña" style="width:100%;">
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px;">
+        <div class="field">
+          <label>Beneficiario (cláusula vigésima primera)</label>
+          <input type="text" id="empBeneficiario" placeholder="Nombre completo">
+        </div>
+        <div class="field">
+          <label>Parentesco del beneficiario</label>
+          <input type="text" id="empParentesco" placeholder="Ej. Esposa, Madre, Hijo...">
+        </div>
+      </div>
+
       <div class="row" style="margin-top:16px;">
         <button class="btn" id="btnSaveEmployee">Agregar empleado</button>
         <button class="btn secondary" id="btnCancelEditEmployee" style="display:none;">Cancelar edición</button>
@@ -499,6 +561,45 @@
     </div>
 
     <div id="employeesTableArea"></div>
+  </section>
+
+  <!-- CONTRATOS -->
+  <section class="panel" id="panel-contratos">
+    <h2>Contratos de trabajo</h2>
+    <p class="sub">Genera el contrato individual de trabajo de un empleado, a prueba (30 días) o por tiempo indeterminado. Se guarda automáticamente en su ficha para volver a imprimirlo cuando quieras.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Empleado</label>
+        <select id="ctrEmpleado"></select>
+      </div>
+      <div class="field">
+        <label>Tipo de contrato</label>
+        <select id="ctrTipo">
+          <option value="prueba30">Prueba a 30 días</option>
+          <option value="indeterminado">Tiempo indeterminado</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Forma de pago</label>
+        <select id="ctrPago">
+          <option value="semanal">Semanal (viernes)</option>
+          <option value="quincenal">Quincenal (15 y último)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Sueldo diario</label>
+        <input type="number" id="ctrSueldoDiario" min="0" step="0.01" placeholder="Ej. 504.98">
+      </div>
+    </div>
+    <div class="hint" id="ctrLetras" style="margin-top:12px;">Escribe el sueldo diario para ver la cantidad en letras.</div>
+
+    <div class="row" style="margin-top:16px;">
+      <button class="btn" id="btnGenContrato">Generar y guardar contrato</button>
+      <button class="btn secondary" id="btnPrintContrato" disabled>Imprimir</button>
+      <span class="sub" id="ctrMsg" style="margin:0;"></span>
+    </div>
+    <div id="ctrArea" style="margin-top:20px;"></div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -582,6 +683,10 @@
         <div class="field">
           <label>RFC</label>
           <input type="text" id="cfgRFC" placeholder="Ej. GEJ850101ABC">
+        </div>
+        <div class="field">
+          <label>CURP (persona física)</label>
+          <input type="text" id="cfgCURP" placeholder="Ej. FIPP650331HCHRNT03">
         </div>
         <div class="field">
           <label>Teléfono</label>
@@ -780,7 +885,7 @@
 <script>
 /* ---------- estado ---------- */
 let PUNCHES = [];
-let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'', empresaLugar:'', rfc:'', telefono:'', empresaLogo:'' };
+let CONFIG = { entrada:'08:00', tolerancia:10, jornada:8, multiplicador:2, bonoPuntualidad:7, dias:[1,2,3,4,5], empresaNombre:'', empresaLugar:'', rfc:'', curp:'', telefono:'', empresaLogo:'' };
 let EMPLOYEES = [];   // {id, nombre, fecha, depto, turnoId, codigoId, foto}
 let TURNOS = [];      // {id, nombre, entrada, salida, tolerancia}
 let CODIGOS = [];     // {id, clave, nombre}
@@ -962,6 +1067,7 @@ async function loadStorage(){
 function applyConfigToForm(){
   document.getElementById('cfgEmpresa').value = CONFIG.empresaNombre || '';
   document.getElementById('cfgRFC').value = CONFIG.rfc || '';
+  document.getElementById('cfgCURP').value = CONFIG.curp || '';
   document.getElementById('cfgTelefono').value = CONFIG.telefono || '';
   document.getElementById('cfgLugar').value = CONFIG.empresaLugar || '';
   if(CONFIG.empresaLogo){
@@ -1264,6 +1370,15 @@ function resetEmployeeForm(){
   document.getElementById('empSueldo').value='';
   document.getElementById('empTurno').value='';
   document.getElementById('empCodigo').value='';
+  document.getElementById('empFechaNac').value='';
+  document.getElementById('empSexo').value='';
+  document.getElementById('empEstadoCivil').value='';
+  document.getElementById('empDomicilio').value='';
+  document.getElementById('empCurp').value='';
+  document.getElementById('empRfc').value='';
+  document.getElementById('empFunciones').value='';
+  document.getElementById('empBeneficiario').value='';
+  document.getElementById('empParentesco').value='';
   document.getElementById('empFotoInput').value='';
   document.getElementById('empFotoPreview').style.display='none';
   document.getElementById('empFotoPlaceholder').style.display='flex';
@@ -1285,7 +1400,17 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     sueldoHora: +document.getElementById('empSueldo').value || 0,
     turnoId: document.getElementById('empTurno').value,
     codigoId: document.getElementById('empCodigo').value,
-    foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : '')
+    fechaNac: document.getElementById('empFechaNac').value,
+    sexo: document.getElementById('empSexo').value,
+    estadoCivil: document.getElementById('empEstadoCivil').value,
+    domicilio: document.getElementById('empDomicilio').value.trim(),
+    curp: document.getElementById('empCurp').value.trim(),
+    rfc: document.getElementById('empRfc').value.trim(),
+    funciones: document.getElementById('empFunciones').value.trim(),
+    beneficiario: document.getElementById('empBeneficiario').value.trim(),
+    parentesco: document.getElementById('empParentesco').value.trim(),
+    foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : ''),
+    contrato: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.contrato || null) : null
   };
   if(editingKey){
     const idx = EMPLOYEES.findIndex(x=>x.id===editingKey);
@@ -1326,6 +1451,15 @@ function editEmployee(id){
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
   document.getElementById('empTurno').value = emp.turnoId || '';
   document.getElementById('empCodigo').value = emp.codigoId || '';
+  document.getElementById('empFechaNac').value = emp.fechaNac || '';
+  document.getElementById('empSexo').value = emp.sexo || '';
+  document.getElementById('empEstadoCivil').value = emp.estadoCivil || '';
+  document.getElementById('empDomicilio').value = emp.domicilio || '';
+  document.getElementById('empCurp').value = emp.curp || '';
+  document.getElementById('empRfc').value = emp.rfc || '';
+  document.getElementById('empFunciones').value = emp.funciones || '';
+  document.getElementById('empBeneficiario').value = emp.beneficiario || '';
+  document.getElementById('empParentesco').value = emp.parentesco || '';
   if(emp.foto){ document.getElementById('empFotoPreview').src = emp.foto; document.getElementById('empFotoPreview').style.display='inline-block'; document.getElementById('empFotoPlaceholder').style.display='none'; }
   else { document.getElementById('empFotoPreview').style.display='none'; document.getElementById('empFotoPlaceholder').style.display='flex'; }
   PENDING_PHOTO = '';
@@ -1592,6 +1726,7 @@ function refreshDeptoPuestoSelects(){
 document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.empresaNombre = document.getElementById('cfgEmpresa').value.trim();
   CONFIG.rfc = document.getElementById('cfgRFC').value.trim();
+  CONFIG.curp = document.getElementById('cfgCURP').value.trim();
   CONFIG.telefono = document.getElementById('cfgTelefono').value.trim();
   CONFIG.empresaLugar = document.getElementById('cfgLugar').value.trim();
   if(PENDING_LOGO){ CONFIG.empresaLogo = PENDING_LOGO; PENDING_LOGO = null; }
@@ -1750,6 +1885,8 @@ function refreshAllEmployeeSelects(){
   const dashInd = document.getElementById('dashIndividualEmpleado'); const dashIndCur = dashInd.value;
   dashInd.innerHTML = ids.length ? opts : '<option value="">-- sin empleados --</option>';
   if(ids.includes(dashIndCur)) dashInd.value = dashIndCur;
+
+  refreshContratoEmpleadoSelect();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -2255,6 +2392,202 @@ function printActa(id, fechaFalta){
   document.getElementById('printArea').innerHTML = actaAdministrativaHtml(id, fechaFalta);
   window.print();
 }
+
+/* ---------- número a letras (para el sueldo diario en los contratos) ---------- */
+const NAL_UNIDADES = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+const NAL_DIEZ_A_DIECINUEVE = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
+const NAL_DECENAS = ['', '', 'veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+const NAL_CENTENAS = ['', 'ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+function nalCentenas(n){
+  if(n===0) return '';
+  if(n===100) return 'cien';
+  const c = Math.floor(n/100), resto = n%100;
+  let out = c>0 ? NAL_CENTENAS[c] : '';
+  if(resto>0){
+    let parte;
+    if(resto<10) parte = NAL_UNIDADES[resto];
+    else if(resto<20) parte = NAL_DIEZ_A_DIECINUEVE[resto-10];
+    else {
+      const d = Math.floor(resto/10), u = resto%10;
+      if(u===0) parte = NAL_DECENAS[d];
+      else if(d===2) parte = u===1 ? 'veintiún' : 'veinti'+NAL_UNIDADES[u];
+      else parte = NAL_DECENAS[d] + ' y ' + NAL_UNIDADES[u];
+    }
+    out = (out ? out+' ' : '') + parte;
+  }
+  return out;
+}
+function nalGrupo(n){
+  if(n===0) return 'cero';
+  if(n<1000) return nalCentenas(n);
+  const miles = Math.floor(n/1000), resto = n%1000;
+  let out = miles===1 ? 'mil' : (nalCentenas(miles)+' mil');
+  if(resto>0) out += ' ' + nalCentenas(resto);
+  return out;
+}
+function numeroALetras(monto){
+  const num = Math.round((monto||0)*100)/100;
+  const entero = Math.floor(num);
+  const centavos = Math.round((num-entero)*100);
+  const letras = nalGrupo(entero).toUpperCase();
+  return `${letras} PESOS ${pad(centavos)}/100 M.N.`;
+}
+
+/* ---------- contratos de trabajo ---------- */
+function horarioTextoDesdeTurno(turnoId){
+  if(!turnoId) return '________________________________ (asigna un turno al empleado para completar este dato)';
+  const t = TURNOS.find(x=>x.id===turnoId);
+  if(!t) return '________________________________';
+  const partes = DOW_ORDER.filter(dow=>t.dias && t.dias[dow] && t.dias[dow].activo).map(dow=>{
+    const d = t.dias[dow];
+    let h = `${d.entrada||'?'} a ${d.salida1||'?'}`;
+    if(d.entrada2 && d.salida2) h += ` y de ${d.entrada2} a ${d.salida2}`;
+    return `${DOW_LABELS[dow]} de ${h} horas`;
+  });
+  return partes.length ? partes.join(', ') + ', con descanso los días no señalados.' : '________________________________';
+}
+function contratoHtml(emp, tipo, pago, sueldoDiario){
+  const nombreEmp = emp.nombre.toUpperCase();
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const domicilioTxt = CONFIG.empresaLugar || '________________________________';
+  const rfcPatron = CONFIG.rfc || '____________';
+  const curpPatron = CONFIG.curp || '____________';
+  const fechaContrato = emp.fecha ? new Date(emp.fecha+'T00:00:00') : new Date();
+  const fechaContratoTxt = fechaLarga(fechaContrato);
+  const fechaNacTxt = emp.fechaNac ? fechaLarga(new Date(emp.fechaNac+'T00:00:00')) : '____________________';
+  const sexoTxt = emp.sexo || '____________';
+  const estadoCivilTxt = emp.estadoCivil || '____________';
+  const domicilioEmpTxt = emp.domicilio || '________________________________';
+  const curpEmpTxt = emp.curp || '____________________';
+  const rfcEmpTxt = emp.rfc || '____________________';
+  const puestoTxt = emp.puesto || '________________________';
+  const funcionesTxt = emp.funciones || 'las propias e inherentes al puesto contratado.';
+  const horarioTxt = horarioTextoDesdeTurno(emp.turnoId);
+  const sueldoFmt = fmtMoney(sueldoDiario);
+  const sueldoLetrasTxt = numeroALetras(sueldoDiario);
+  const beneficiarioTxt = emp.beneficiario || '______________________________';
+  const parentescoTxt = emp.parentesco || '________________';
+
+  const tipoRelacionTxt = tipo==='prueba30'
+    ? 'a prueba por un periodo de 30 días, empezando la relación a partir de la firma del presente instrumento.'
+    : 'por tiempo indeterminado, empezando la relación a partir de la firma del presente instrumento.';
+  const pagoTxt = pago==='quincenal'
+    ? 'los días 15 y último de cada mes'
+    : 'el viernes siguiente de la fecha en el que concluye el periodo que se señala en el citado recibo';
+
+  const logoBlock = (CONFIG.empresaLogo || CONFIG.empresaNombre) ? `<div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:16px;">
+      ${CONFIG.empresaLogo ? `<img src="${CONFIG.empresaLogo}" style="width:46px; height:46px; object-fit:contain; border-radius:8px;">` : ''}
+      <div style="text-align:left;">
+        ${CONFIG.empresaNombre ? `<div style="font-family:var(--display); font-weight:700; font-size:13.5px; color:var(--navy);">${CONFIG.empresaNombre}</div>` : ''}
+        ${CONFIG.rfc ? `<div style="font-size:10px; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="pagina-oficio" style="max-width:760px; margin:0 auto; font-size:12.5px; line-height:1.65; text-align:justify;">
+      ${logoBlock}
+      <h1 style="text-align:center; font-family:var(--display); font-size:17px; letter-spacing:.04em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
+      <p>Que celebran por una parte la empresa denominada <b>${empresaTxt}</b>, y por la otra el C. <b>${nombreEmp}</b>, bajo las siguientes generalidades y cláusulas:</p>
+      <p style="text-align:center; margin-top:14px;"><b>G E N E R A L I D A D E S</b></p>
+      <p><b>1.-</b> <b>${empresaTxt}</b>, es una persona física debidamente registrada ante el SAT, teniendo su domicilio en ${domicilioTxt}, con Registro Federal de Contribuyentes <b>${rfcPatron}</b>, con CURP <b>${curpPatron}</b> y por tal con capacidad para obligarse, y a quien en lo sucesivo y para los efectos del presente contrato, se le denominará <b>PATRÓN</b>.</p>
+      <p><b>2.-</b> El PATRÓN para la consecución de su objeto social, requiere contar con personal para el desarrollo de sus actividades.</p>
+      <p><b>3.-</b> C. <b>${nombreEmp}</b> manifiesta llamarse como ha quedado escrito, tener la nacionalidad mexicana, haber nacido el <b>${fechaNacTxt}</b>, sexo <b>${sexoTxt}</b>, estado civil <b>${estadoCivilTxt}</b>, con domicilio en <b>${domicilioEmpTxt}</b>, con Clave Única de Registro de Población <b>${curpEmpTxt}</b> y Registro Federal de Contribuyentes <b>${rfcEmpTxt}</b>, acudiendo a la celebración del presente contrato por sus propios derechos, y a quien en lo sucesivo y para los efectos del mismo se le denominará <b>TRABAJADOR</b>.</p>
+      <p><b>4.-</b> El TRABAJADOR manifiesta contar con la experiencia y conocimientos necesarios para desempeñar el servicio especializado que requiere el PATRÓN, dentro de las áreas que se describen en la cláusula segunda del presente contrato.</p>
+      <p><b>5.-</b> El TRABAJADOR da su consentimiento en desempeñar los requerimientos del PATRÓN y en aceptar las condiciones generales de trabajo sobre las cuales presentará sus servicios personales, en el domicilio del Patrón y en los que designe en forma temporal.</p>
+      <p><b>6.-</b> El presente contrato de trabajo se celebra en esta Ciudad de Cuauhtémoc, Chihuahua, el día <b>${fechaContratoTxt}</b>, por lo que ambas partes están de acuerdo en someterse al tenor de las siguientes:</p>
+
+      <p style="text-align:center; margin-top:16px;"><b>CLÁUSULAS</b></p>
+      <p><b>PRIMERA: TIPO DE RELACIÓN.</b>- El PATRÓN, por medio de la presente, contrata a EL TRABAJADOR ${tipoRelacionTxt}</p>
+      <p><b>SEGUNDA: EN CUANTO AL PUESTO.</b>- El TRABAJADOR se obliga a prestar al patrón, bajo la dirección, dependencia y subordinación de éste, sus servicios personales en el puesto de <b>${puestoTxt}</b>, consistiendo sus labores en: ${funcionesTxt} Estas labores se describen de manera enunciativa y no limitativa, por lo que además se consideran todas aquellas que se relacionen con el puesto contratado y se compromete a realizarlas, manteniendo en todo momento aseado su lugar de trabajo.</p>
+      <p><b>TERCERA: LUGARES DE TRABAJO.</b>- El lugar donde el trabajador prestará sus labores será el que se encuentra en ${domicilioTxt}, aceptando además seguir prestando sus servicios en aquellos que la empresa pudiese llegar a tener nuevos.</p>
+      <p><b>CUARTA: HORARIO DE TRABAJO.</b>- Se conviene que el servicio se prestará en el siguiente horario: ${horarioTxt} Este horario podrá cambiarse por acuerdo de ambas partes o unilateralmente por el patrón, avisando por escrito al trabajador con al menos veinticuatro horas de anticipación.</p>
+      <p><b>QUINTA.</b>- EL TRABAJADOR está obligado a someterse a reconocimiento médico para comprobar que no tiene incapacidad o enfermedad contagiosa o incurable, tanto al ingresar a la empresa como durante la relación de trabajo, en los términos de la fracción X del artículo 134 de la Ley Federal del Trabajo.</p>
+      <p><b>SEXTA: DEL SALARIO.</b>- El patrón se obliga a pagar por salario diario la cantidad de <b>$${sueldoFmt}</b> (SON ${sueldoLetrasTxt}), el cual se hará en efectivo, pagándose ${pagoTxt}.</p>
+      <p><b>SÉPTIMA: DESCUENTOS AL SALARIO.</b>- Únicamente se descontarán de las percepciones del trabajador lo que expresamente permite la Ley Federal del Trabajo, incluyendo ISPT, ISR, así como las aportaciones ante el IMSS, AFORES, INFONAVIT, INFONACOT y demás organismos competentes.</p>
+      <p><b>OCTAVA.</b>- El patrón proporcionará al trabajador la herramienta, utensilios y material para el desempeño de su trabajo; en caso de pérdida o daño por descuido o imprudencia del trabajador, éste será responsable de restituir el costo, mediante descuentos no mayores al 30% del excedente del salario mínimo.</p>
+      <p><b>NOVENA.</b>- En caso de que el patrón pague cantidades superiores por error, el trabajador acepta que se le descuenten, señalándose en el recibo de pago como pagos hechos en exceso por error.</p>
+      <p><b>DÉCIMA: DE LA ANTIGÜEDAD.</b>- La antigüedad del trabajador empieza a partir del día <b>${fechaContratoTxt}</b>.</p>
+      <p><b>DÉCIMA PRIMERA.</b>- El TRABAJADOR se obliga a checar tarjeta o firmar las listas de asistencia respectivas a la entrada y salida de sus labores; el incumplimiento se computará como falta injustificada para los efectos legales a que haya lugar.</p>
+      <p><b>DÉCIMA SEGUNDA.</b>- El día señalado como descanso semanal podrá modificarse por el patrón cuando sea necesario, siempre que se siga otorgando esta prestación al trabajador.</p>
+      <p><b>DÉCIMA TERCERA.</b>- Ambas partes declaran conocer sus obligaciones y prohibiciones conforme a los artículos 132 y 133 (Patrón) y 134 y 135 (Trabajador) de la Ley Federal del Trabajo.</p>
+      <p><b>DÉCIMA CUARTA.</b>- Queda prohibido para el trabajador laborar tiempo extraordinario o en su día de descanso salvo autorización expresa y por escrito del patrón, pagándose conforme a la Ley Federal del Trabajo.</p>
+      <p><b>DÉCIMA QUINTA.</b>- El trabajador tendrá derecho al periodo vacacional y a la prima vacacional en los términos que prevé la Ley Federal del Trabajo.</p>
+      <p><b>DÉCIMA SEXTA.</b>- El trabajador tendrá derecho a una gratificación anual por concepto de aguinaldo, pagada antes del 20 de diciembre de cada año.</p>
+      <p><b>DÉCIMA SÉPTIMA.</b>- Ambas partes convienen en acatar el Reglamento Interior de Trabajo, del cual el TRABAJADOR manifiesta haber recibido copia.</p>
+      <p><b>DÉCIMA OCTAVA.</b>- Ambas partes acatarán las disposiciones en materia de Seguridad e Higiene que dicten las autoridades competentes.</p>
+      <p><b>DÉCIMA NOVENA.</b>- Ambas partes observarán las disposiciones en materia de Capacitación y Adiestramiento que dicten las autoridades competentes.</p>
+      <p><b>VIGÉSIMA.</b>- Será obligatorio para el trabajador dar aviso al patrón con treinta días de anticipación cuando pretenda renunciar, así como comunicar cualquier cambio de domicilio u otra relación laboral.</p>
+      <p><b>VIGÉSIMA PRIMERA.</b>- Conforme al artículo 501 de la Ley Federal del Trabajo, el trabajador designa como beneficiario a: <b>${beneficiarioTxt}</b>, con parentesco <b>${parentescoTxt}</b>, para el pago de salarios y prestaciones devengadas no cobradas en caso de fallecimiento o desaparición.</p>
+      <p><b>VIGÉSIMA SEGUNDA.</b>- El TRABAJADOR reconoce que con motivo de sus funciones tiene acceso a información confidencial y/o secretos industriales del PATRÓN y/o sus clientes, obligándose a no divulgarlos ni utilizarlos en su provecho o de terceros, durante y después de la relación laboral.</p>
+
+      <p style="margin-top:18px;">AMBAS PARTES, ENTERADAS DEL CONTENIDO Y ALCANCE DE LAS CLÁUSULAS QUE CONTIENE EL PRESENTE CONTRATO, LO FIRMAN DE ENTERA CONFORMIDAD, HACIÉNDOLO EN PRESENCIA DE DOS PERSONAS QUE COMO TESTIGOS COMPARECEN A LA FIRMA DEL PRESENTE CONTRATO.</p>
+
+      <div class="sig-row" style="margin-top:46px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>PATRÓN</b><br>${empresaTxt}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR</b><br>${nombreEmp}</div></div>
+      </div>
+      <div class="sig-row" style="margin-top:46px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
+      </div>
+    </div>
+  `;
+}
+function refreshContratoEmpleadoSelect(){
+  const sel = document.getElementById('ctrEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = allKnownEmployeeIds();
+  sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+function updateCtrLetras(){
+  const monto = +document.getElementById('ctrSueldoDiario').value || 0;
+  document.getElementById('ctrLetras').innerHTML = monto>0
+    ? `<b>Cantidad en letras:</b> SON ${numeroALetras(monto)}`
+    : 'Escribe el sueldo diario para ver la cantidad en letras.';
+}
+document.getElementById('ctrSueldoDiario').addEventListener('input', updateCtrLetras);
+document.getElementById('ctrEmpleado').addEventListener('change', ()=>{
+  const id = document.getElementById('ctrEmpleado').value;
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  document.getElementById('btnPrintContrato').disabled = true;
+  document.getElementById('ctrArea').innerHTML = '';
+  if(emp && emp.contrato){
+    document.getElementById('ctrTipo').value = emp.contrato.tipo;
+    document.getElementById('ctrPago').value = emp.contrato.pago;
+    document.getElementById('ctrSueldoDiario').value = emp.contrato.sueldoDiario;
+    updateCtrLetras();
+    document.getElementById('ctrMsg').textContent = 'Este empleado ya tiene un contrato guardado — puedes generarlo de nuevo si algo cambió.';
+  } else {
+    document.getElementById('ctrMsg').textContent = '';
+    updateCtrLetras();
+  }
+});
+document.getElementById('btnGenContrato').addEventListener('click', ()=>{
+  const id = document.getElementById('ctrEmpleado').value;
+  const tipo = document.getElementById('ctrTipo').value;
+  const pago = document.getElementById('ctrPago').value;
+  const sueldoDiario = +document.getElementById('ctrSueldoDiario').value || 0;
+  if(!id){ toast('Elige un empleado.'); return; }
+  if(!sueldoDiario){ toast('Escribe el sueldo diario.'); return; }
+  const idx = EMPLOYEES.findIndex(e=>e.id===id);
+  if(idx===-1){ toast('Ese empleado no está en el directorio. Dalo de alta primero en "Empleados".'); return; }
+  EMPLOYEES[idx].contrato = { tipo, pago, sueldoDiario, generadoEl: isoDate(new Date()) };
+  saveStorage();
+  const html = contratoHtml(EMPLOYEES[idx], tipo, pago, sueldoDiario);
+  document.getElementById('ctrArea').innerHTML = html;
+  document.getElementById('btnPrintContrato').disabled = false;
+  document.getElementById('ctrMsg').textContent = 'Contrato guardado en la ficha del empleado.';
+  toast('Contrato generado y guardado.');
+});
+document.getElementById('btnPrintContrato').addEventListener('click', ()=>{
+  const area = document.getElementById('ctrArea');
+  if(!area.innerHTML.trim()) return;
+  document.getElementById('printArea').innerHTML = area.innerHTML;
+  window.print();
+});
+
 document.getElementById('btnPrintReport').addEventListener('click', ()=>{
   if(window._lastReportAll){
     const all = window._lastReportAll;
