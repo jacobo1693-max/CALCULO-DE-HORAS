@@ -1211,10 +1211,13 @@ function computeDay(id, fecha){
   const sched = getScheduleFor(id, fecha);
   let dayPunches;
   if(sched.activo && sched.overnight && sched.entrada){
-    // Turno nocturno (ej. 17:00 a 01:00): la jornada de este día empieza a la hora de entrada
-    // y se extiende ~20 horas para poder incluir la salida del día siguiente.
-    const startTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
-    const endTs = startTs + 20*60*60*1000;
+    // Turno nocturno (ej. 17:00 a 01:00): la ventana de este día empieza un poco ANTES de la hora
+    // de entrada programada (para no perder checadas de entrada anticipadas) y se extiende lo
+    // suficiente para cubrir la salida del día siguiente, sin invadir la ventana del día anterior.
+    const entradaMins = timeToMins(sched.entrada);
+    const preBufferMins = 4*60; // 4 horas de margen antes de la entrada programada
+    const startTs = new Date(fecha+'T00:00:00').getTime() + (entradaMins - preBufferMins)*60000;
+    const endTs = startTs + 20*60*60*1000; // ventana total de 20 horas
     dayPunches = PUNCHES.filter(p=>p.id===id && p.ts>=startTs && p.ts<endTs).sort((a,b)=>a.ts-b.ts);
   } else {
     dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
