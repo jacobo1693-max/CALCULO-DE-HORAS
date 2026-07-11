@@ -2210,7 +2210,9 @@ function actaAdministrativaHtml(id, fechaFalta){
   const emp = EMPLOYEES.find(e=>e.id===id);
   const nombre = employeeDisplayName(id);
   const puesto = (emp && emp.puesto) ? emp.puesto : '________________________';
-  const lugar = CONFIG.empresaLugar || '________________________________________________';
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const domicilioTxt = CONFIG.empresaLugar || '________________________________________________';
+  const lugarTexto = `Oficinas de ${empresaTxt}, ubicadas en ${domicilioTxt}.`;
   const now = new Date();
   const dFalta = new Date(fechaFalta+'T00:00:00');
   return `
@@ -2222,29 +2224,29 @@ function actaAdministrativaHtml(id, fechaFalta){
           ${CONFIG.rfc ? `<div style="font-size:10px; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
         </div>
       </div>` : ''}
-      <h1 style="text-align:center; font-family:var(--display); font-size:19px; letter-spacing:.05em; margin-bottom:24px;">ACTA ADMINISTRATIVA</h1>
-      <p><b>Fecha y Hora:</b> ${fechaLarga(now)}, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
-      <p><b>Lugar:</b> ${lugar}</p>
+      <h1 style="text-align:center; font-family:var(--display); font-weight:700; font-size:19px; letter-spacing:.05em; margin-bottom:24px;"><b>ACTA ADMINISTRATIVA</b></h1>
+      <p><b>Fecha</b> y Hora: <b>${fechaLarga(now)}</b>, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
+      <p><b>Lugar:</b> ${lugarTexto}</p>
       <p><b>Asistentes:</b> Los abajo firmantes.</p>
 
       <p style="margin-top:20px;"><b>Hechos Constatados:</b></p>
-      <p>Se hace constar que ${nombre}, con el puesto de ${puesto}, el día ${fechaLarga(dFalta)}, no se presentó a laborar.</p>
-      <p>En Recursos Humanos no se presentó ningún permiso escrito ni justificante válido que avalara su ausencia, ni se entregó documento firmado por su superior inmediato autorizando su ausencia. Tampoco proporcionó una explicación posterior que justificara su acción.</p>
+      <p>Se hace constar que <b>${nombre}</b>, con el puesto de ${puesto}, el día ${fechaLarga(dFalta)}, no se presentó a laborar.</p>
+      <p>En <b>Recursos Humanos</b> no se presentó ningún permiso escrito ni justificante válido que avalara su ausencia, ni se entregó documento firmado por su superior inmediato autorizando su ausencia. Tampoco proporcionó una explicación posterior que justificara su acción.</p>
 
       <p style="margin-top:20px;"><b>Determinación:</b></p>
-      <p>Debido a lo anterior, y en cumplimiento con los lineamientos internos de la empresa, se registra una falta injustificada en su expediente laboral.</p>
+      <p>Debido a lo anterior, y en cumplimiento con los lineamientos internos de la empresa, se registra una <b>falta injustificada</b> en su expediente laboral.</p>
 
       <p style="margin-top:20px;"><b>Objetivo del Acta:</b></p>
-      <p>La presente acta administrativa se levanta para dejar constancia formal de los hechos y notificar a ${nombre} sobre esta incidencia, conforme a los procedimientos establecidos.</p>
+      <p>La presente acta administrativa se levanta para dejar constancia formal de los hechos y notificar a <b>${nombre}</b> sobre esta incidencia, conforme a los procedimientos establecidos.</p>
 
       <p style="margin-top:34px;"><b>Firmas de Constatación:</b></p>
       <div class="sig-row" style="margin-top:52px;">
-        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TRABAJADOR INVOLUCRADO<br>${nombre}</div></div>
-        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">RECURSOS HUMANOS</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR INVOLUCRADO</b><br>${nombre}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>RECURSOS HUMANOS</b></div></div>
       </div>
       <div class="sig-row" style="margin-top:52px;">
-        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TESTIGOS</div></div>
-        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TESTIGOS</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
       </div>
     </div>
   `;
