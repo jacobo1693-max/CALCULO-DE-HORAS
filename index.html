@@ -450,6 +450,10 @@
           <input type="text" id="empDepto" placeholder="Ej. Producción">
         </div>
         <div class="field">
+          <label>Puesto</label>
+          <input type="text" id="empPuesto" placeholder="Ej. Ayudante General">
+        </div>
+        <div class="field">
           <label>Sueldo por hora</label>
           <input type="number" id="empSueldo" placeholder="Ej. 45.50" min="0" step="0.01">
         </div>
@@ -536,6 +540,10 @@
       <div class="field" style="min-width:240px;">
         <label>Nombre de la empresa</label>
         <input type="text" id="cfgEmpresa" placeholder="Ej. Grupo Ejemplo S.A. de C.V.">
+      </div>
+      <div class="field" style="min-width:320px;">
+        <label>Domicilio / lugar (para actas administrativas)</label>
+        <input type="text" id="cfgLugar" placeholder="Ej. KM 7, Carr. a Obregón a Cuauhtémoc S/N">
       </div>
     </div>
     <div class="row" style="margin-top:14px;">
@@ -873,6 +881,7 @@ async function loadStorage(){
 }
 function applyConfigToForm(){
   document.getElementById('cfgEmpresa').value = CONFIG.empresaNombre || '';
+  document.getElementById('cfgLugar').value = CONFIG.empresaLugar || '';
   document.getElementById('cfgEntrada').value = CONFIG.entrada;
   document.getElementById('cfgTolerancia').value = CONFIG.tolerancia;
   document.getElementById('cfgJornada').value = CONFIG.jornada;
@@ -1145,6 +1154,7 @@ function resetEmployeeForm(){
   document.getElementById('empId').value='';
   document.getElementById('empFecha').value='';
   document.getElementById('empDepto').value='';
+  document.getElementById('empPuesto').value='';
   document.getElementById('empSueldo').value='';
   document.getElementById('empTurno').value='';
   document.getElementById('empCodigo').value='';
@@ -1165,6 +1175,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     nombre,
     fecha: document.getElementById('empFecha').value,
     depto: document.getElementById('empDepto').value.trim(),
+    puesto: document.getElementById('empPuesto').value.trim(),
     sueldoHora: +document.getElementById('empSueldo').value || 0,
     turnoId: document.getElementById('empTurno').value,
     codigoId: document.getElementById('empCodigo').value,
@@ -1192,6 +1203,7 @@ function editEmployee(id){
   document.getElementById('empId').value = emp.id;
   document.getElementById('empFecha').value = emp.fecha || '';
   document.getElementById('empDepto').value = emp.depto || '';
+  document.getElementById('empPuesto').value = emp.puesto || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
   document.getElementById('empTurno').value = emp.turnoId || '';
   document.getElementById('empCodigo').value = emp.codigoId || '';
@@ -1212,7 +1224,7 @@ function renderEmployeesTable(){
   const area = document.getElementById('employeesTableArea');
   if(!EMPLOYEES.length){ area.innerHTML = emptyState('Aún no hay empleados registrados en el directorio.'); return; }
   const sorted = [...EMPLOYEES].sort((a,b)=>compareIdsNumeric(a.id,b.id));
-  let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th></th></tr></thead><tbody>`;
+  let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Puesto</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th></th></tr></thead><tbody>`;
   sorted.forEach(e=>{
     const turno = TURNOS.find(t=>t.id===e.turnoId);
     const codigo = CODIGOS.find(c=>c.id===e.codigoId);
@@ -1221,6 +1233,7 @@ function renderEmployeesTable(){
       <td><b>${e.nombre}</b></td>
       <td class="mono">${e.id}</td>
       <td>${e.depto||'—'}</td>
+      <td>${e.puesto||'—'}</td>
       <td class="mono">${e.fecha||'—'}</td>
       <td class="mono">${e.sueldoHora ? '$'+Number(e.sueldoHora).toFixed(2) : '—'}</td>
       <td>${turno ? turno.nombre : '—'}</td>
@@ -1387,6 +1400,7 @@ function renderCodigosTable(){
 /* ---------- config ---------- */
 document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.empresaNombre = document.getElementById('cfgEmpresa').value.trim();
+  CONFIG.empresaLugar = document.getElementById('cfgLugar').value.trim();
   CONFIG.entrada = document.getElementById('cfgEntrada').value || '08:00';
   CONFIG.tolerancia = +document.getElementById('cfgTolerancia').value || 0;
   CONFIG.jornada = +document.getElementById('cfgJornada').value || 8;
@@ -1740,7 +1754,7 @@ function reportTableHtml(rep){
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
       <td class="mono">${rep.sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
-      <td><span class="tag ${r.status}">${r.label}</span></td>
+      <td><span class="tag ${r.status}">${r.label}</span>${r.status==='absent' ? `<br><button class="btn secondary small" style="margin-top:5px;" onclick="printActa('${rep.id}','${r.fecha}')">Generar acta</button>` : ''}</td>
     </tr>`;
   });
   html += `</tbody></table>`;
@@ -1934,9 +1948,10 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
   if(!rows.length){
     html += emptyState('No se encontraron faltas ni retardos en este rango para los empleados seleccionados.');
   } else {
-    html += `<table><thead><tr><th>Empleado</th><th>No.</th><th>Fecha</th><th>Día</th><th>Tipo</th><th>Detalle</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Empleado</th><th>No.</th><th>Fecha</th><th>Día</th><th>Tipo</th><th>Detalle</th><th></th></tr></thead><tbody>`;
     rows.forEach(r=>{
       const tagCls = r.tipo==='Falta injustificada' ? 'absent' : 'late';
+      const accion = r.tipo==='Falta injustificada' ? `<button class="btn secondary small" onclick="printActa('${escAttr(r.id)}','${r.fecha}')">Generar acta</button>` : '';
       html += `<tr>
         <td><b>${r.nombre}</b></td>
         <td class="mono">${r.id}</td>
@@ -1944,6 +1959,7 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
         <td>${dayNames[r.dow]}</td>
         <td><span class="tag ${tagCls}">${r.tipo}</span></td>
         <td>${r.detalle}</td>
+        <td>${accion}</td>
       </tr>`;
     });
     html += `</tbody></table>`;
@@ -1984,6 +2000,48 @@ function printHeadHtml(title, subtitle){
 function printSection(title, subtitle, bodyHtml){
   const area = document.getElementById('printArea');
   area.innerHTML = printHeadHtml(title, subtitle) + bodyHtml;
+  window.print();
+}
+const MESES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function fechaLarga(d){ return `${d.getDate()} de ${MESES_LARGO[d.getMonth()]} de ${d.getFullYear()}`; }
+function actaAdministrativaHtml(id, fechaFalta){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const nombre = employeeDisplayName(id);
+  const puesto = (emp && emp.puesto) ? emp.puesto : '________________________';
+  const lugar = CONFIG.empresaLugar || '________________________________________________';
+  const now = new Date();
+  const dFalta = new Date(fechaFalta+'T00:00:00');
+  return `
+    <div style="max-width:720px; margin:0 auto; font-size:13.5px; line-height:1.75;">
+      <h1 style="text-align:center; font-family:var(--display); font-size:19px; letter-spacing:.05em; margin-bottom:24px;">ACTA ADMINISTRATIVA</h1>
+      <p><b>Fecha y Hora:</b> ${fechaLarga(now)}, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
+      <p><b>Lugar:</b> ${lugar}</p>
+      <p><b>Asistentes:</b> Los abajo firmantes.</p>
+
+      <p style="margin-top:20px;"><b>Hechos Constatados:</b></p>
+      <p>Se hace constar que ${nombre}, con el puesto de ${puesto}, el día ${fechaLarga(dFalta)}, no se presentó a laborar.</p>
+      <p>En Recursos Humanos no se presentó ningún permiso escrito ni justificante válido que avalara su ausencia, ni se entregó documento firmado por su superior inmediato autorizando su ausencia. Tampoco proporcionó una explicación posterior que justificara su acción.</p>
+
+      <p style="margin-top:20px;"><b>Determinación:</b></p>
+      <p>Debido a lo anterior, y en cumplimiento con los lineamientos internos de la empresa, se registra una falta injustificada en su expediente laboral.</p>
+
+      <p style="margin-top:20px;"><b>Objetivo del Acta:</b></p>
+      <p>La presente acta administrativa se levanta para dejar constancia formal de los hechos y notificar a ${nombre} sobre esta incidencia, conforme a los procedimientos establecidos.</p>
+
+      <p style="margin-top:34px;"><b>Firmas de Constatación:</b></p>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TRABAJADOR INVOLUCRADO<br>${nombre}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">RECURSOS HUMANOS</div></div>
+      </div>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TESTIGOS</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">TESTIGOS</div></div>
+      </div>
+    </div>
+  `;
+}
+function printActa(id, fechaFalta){
+  document.getElementById('printArea').innerHTML = actaAdministrativaHtml(id, fechaFalta);
   window.print();
 }
 document.getElementById('btnPrintReport').addEventListener('click', ()=>{
