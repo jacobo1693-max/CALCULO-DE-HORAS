@@ -270,6 +270,7 @@
       <button data-tab="import">Importar checadas</button>
       <button data-tab="employees">Empleados</button>
       <button data-tab="contratos">Contratos</button>
+      <button data-tab="baja">Renuncia y finiquito</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -605,6 +606,47 @@
       <span class="sub" id="ctrMsg" style="margin:0;"></span>
     </div>
     <div id="ctrArea" style="margin-top:20px;"></div>
+  </section>
+
+  <!-- RENUNCIA Y FINIQUITO -->
+  <section class="panel" id="panel-baja">
+    <h2>Renuncia y finiquito</h2>
+    <p class="sub">Genera la carta de renuncia voluntaria y el finiquito de un empleado, usando su nombre, puesto, antigüedad y horario ya guardados en su ficha y su turno.</p>
+
+    <div class="row">
+      <div class="field">
+        <label>Empleado</label>
+        <select id="bajaEmpleado"></select>
+      </div>
+      <div class="field">
+        <label>Fecha de renuncia</label>
+        <input type="date" id="bajaFecha">
+      </div>
+      <div class="field">
+        <label>Salario diario</label>
+        <input type="number" id="bajaSalario" min="0" step="0.01" placeholder="Ej. 565.88">
+      </div>
+    </div>
+
+    <h3 style="margin-top:20px; margin-bottom:8px;">Desglose del finiquito</h3>
+    <p class="sub" style="margin-bottom:10px;">Escribe los importes; usa números negativos para descuentos (ISR, préstamos, etc.). El total se calcula solo.</p>
+    <div style="overflow-x:auto;">
+      <table id="bajaConceptosTable">
+        <thead><tr><th>Concepto</th><th>Importe</th><th></th></tr></thead>
+        <tbody id="bajaConceptosBody"></tbody>
+      </table>
+    </div>
+    <div class="row" style="margin-top:10px; align-items:center;">
+      <button class="btn secondary small" id="btnAddConcepto">+ Agregar concepto</button>
+      <div class="hint" id="bajaTotal" style="margin:0;">Total: $0.00</div>
+    </div>
+
+    <div class="row" style="margin-top:20px;">
+      <button class="btn" id="btnGuardarBaja">Guardar datos</button>
+      <button class="btn secondary" id="btnImprimirRenuncia" disabled>Imprimir renuncia</button>
+      <button class="btn secondary" id="btnImprimirFiniquito" disabled>Imprimir finiquito</button>
+      <span class="sub" id="bajaMsg" style="margin:0;"></span>
+    </div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -1422,7 +1464,8 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     beneficiario: document.getElementById('empBeneficiario').value.trim(),
     parentesco: document.getElementById('empParentesco').value.trim(),
     foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : ''),
-    contrato: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.contrato || null) : null
+    contrato: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.contrato || null) : null,
+    separacion: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.separacion || null) : null
   };
   if(editingKey){
     const idx = EMPLOYEES.findIndex(x=>x.id===editingKey);
@@ -1900,6 +1943,7 @@ function refreshAllEmployeeSelects(){
   if(ids.includes(dashIndCur)) dashInd.value = dashIndCur;
 
   refreshContratoEmpleadoSelect();
+  refreshBajaEmpleadoSelect();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -2459,6 +2503,19 @@ function horarioTextoDesdeTurno(turnoId){
   });
   return partes.length ? partes.join(', ') : '________________________________';
 }
+function turnoResumenSemana(turnoId){
+  if(!turnoId) return { horasSemana: '____', descansoTxt: '________________________' };
+  const t = TURNOS.find(x=>x.id===turnoId);
+  if(!t) return { horasSemana: '____', descansoTxt: '________________________' };
+  let totalMins = 0;
+  const inactivos = [];
+  DOW_ORDER.forEach(dow=>{
+    const d = t.dias && t.dias[dow];
+    if(d && d.activo) totalMins += minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
+    else inactivos.push(DOW_LABELS[dow].toUpperCase());
+  });
+  return { horasSemana: Math.round(totalMins/60), descansoTxt: inactivos.length ? inactivos.join(' Y ') : '________________________' };
+}
 function contratoHtml(emp, tipo, pago, sueldoDiario, fechaCelebracion){
   const nombreEmp = emp.nombre.toUpperCase();
   const empresaTxt = CONFIG.empresaNombre || '________________________________';
@@ -2558,6 +2615,166 @@ function contratoHtml(emp, tipo, pago, sueldoDiario, fechaCelebracion){
     </div>
   `;
 }
+const FINIQUITO_CONCEPTOS_DEFAULT = ['SUELDO NORMAL','VACACIONES','PRIMA VACACIONAL','GRATIFICACIÓN ANUAL / AGUINALDO','SÉPTIMO DÍA','SUBSIDIO','BONO DE ASISTENCIA','ISR','SEGURO SOCIAL','CRÉDITO INFONAVIT','PRÉSTAMO'];
+function bajaLetterheadHtml(){
+  return (CONFIG.empresaLogo || CONFIG.empresaNombre) ? `<div style="display:flex; align-items:center; gap:10px; justify-content:center; margin-bottom:16px;">
+      ${CONFIG.empresaLogo ? `<img src="${CONFIG.empresaLogo}" style="width:46px; height:46px; object-fit:contain; border-radius:8px;">` : ''}
+      <div style="text-align:left;">
+        ${CONFIG.empresaNombre ? `<div style="font-family:Arial, Helvetica, sans-serif; font-weight:700; font-size:13pt; color:var(--navy);">${CONFIG.empresaNombre}</div>` : ''}
+        ${CONFIG.rfc ? `<div style="font-size:9pt; color:var(--ink-soft);">RFC: ${CONFIG.rfc}</div>` : ''}
+      </div>
+    </div>` : '';
+}
+function renunciaHtml(emp, fecha, salarioDiario){
+  const nombreEmp = emp.nombre.toUpperCase();
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const puestoTxt = emp.puesto || '________________________';
+  const fechaTxt = fechaLarga(new Date(fecha+'T00:00:00'));
+  const antiguedadTxt = emp.fecha ? fechaLarga(new Date(emp.fecha+'T00:00:00')) : '____________________';
+  const horarioTxt = horarioTextoDesdeTurno(emp.turnoId);
+  const resumen = turnoResumenSemana(emp.turnoId);
+  const sueldoLetrasTxt = numeroALetras(salarioDiario);
+  return `
+    <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
+      ${bajaLetterheadHtml()}
+      <p>CUAUHTÉMOC, Chihuahua, a ${fechaTxt}</p>
+      <p style="margin-top:16px;"><b>RENUNCIA VOLUNTARIA DEL TRABAJADOR ${nombreEmp}, POR LA PRESTACIÓN DE SERVICIOS PERSONALES SUBORDINADOS CON LA EMPRESA ${empresaTxt}</b></p>
+      <p style="margin-top:16px;">PRESENTE.</p>
+      <p style="margin-top:10px;">Por medio de la presente me permito comunicarle que con fecha ${fechaTxt}, estoy presentando formalmente mi renuncia con carácter de irrevocable, al puesto que venía desempeñando como empleado de <b>${puestoTxt}</b>, teniendo como antigüedad a partir ${antiguedadTxt}, en el que percibía un salario diario la cantidad de $${fmtMoney(salarioDiario)} SON ${sueldoLetrasTxt} y con un horario de labores ${horarioTxt}, dentro de una jornada y horario continuo de labores un total de ${resumen.horasSemana} horas a la semana, descansando los días ${resumen.descansoTxt} de cada semana, en tal virtud, manifiesto que es mi plena voluntad dar por terminada la relación de trabajo que me unía con Usted.</p>
+      <p style="margin-top:10px;">Así mismo y bajo protesta de decir verdad, expreso que durante el tiempo en que estuvo sujeta la relación laboral, siempre recibí puntualmente el pago de mis salarios, vacaciones, prima vacacional, aguinaldo, horas extras cuando las laboré y en general todas y cada una de las prestaciones legales y contractuales a las que tuve derecho, por ello no me reservo derecho o acción alguna que reclamar en su contra.</p>
+      <p style="margin-top:10px;">De igual manera manifiesto bajo protesta de decir verdad, que durante el tiempo en que laboré para Ustedes, nunca sufrí accidente o enfermedad de trabajo alguno, por ello tampoco me reservo acción o derecho que ejercitar en contra de la empresa o de quien legalmente la represente.</p>
+      <p style="margin-top:10px;">De esta manera, reitero a Usted las atenciones que fueron prestadas durante el tiempo en que presté mis servicios.</p>
+      <div style="margin-top:50px; text-align:center;">
+        <p style="margin:0;"><b>ATENTAMENTE</b></p>
+        <p style="margin:4px 0 0;">${nombreEmp}</p>
+        <div class="sig-line" style="max-width:280px; margin:44px auto 0;"></div>
+        <div class="sig-label">(Nombre y Firma)</div>
+      </div>
+    </div>
+  `;
+}
+function finiquitoHtml(emp, fecha, salarioDiario, conceptos){
+  const nombreEmp = emp.nombre.toUpperCase();
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const puestoTxt = emp.puesto || '________________________';
+  const fechaTxt = fechaLarga(new Date(fecha+'T00:00:00'));
+  const antiguedadTxt = emp.fecha ? fechaLarga(new Date(emp.fecha+'T00:00:00')) : '____________________';
+  const horarioTxt = horarioTextoDesdeTurno(emp.turnoId);
+  const resumen = turnoResumenSemana(emp.turnoId);
+  const sueldoLetrasTxt = numeroALetras(salarioDiario);
+  const total = conceptos.reduce((s,c)=>s+(+c.monto||0),0);
+  const totalLetrasTxt = numeroALetras(Math.abs(total));
+  const filas = conceptos.map(c=>`<tr><td>${c.nombre}</td><td class="mono" style="text-align:right;">${c.monto!=='' && c.monto!=null ? fmtMoney(+c.monto) : '—'}</td></tr>`).join('');
+  return `
+    <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
+      ${bajaLetterheadHtml()}
+      <p>CUAUHTÉMOC, Chihuahua, a ${fechaTxt}</p>
+      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15pt; letter-spacing:.1em; margin:16px 0;"><b>F I N I Q U I T O</b></h1>
+      <p><b>FINIQUITO DEL TRABAJADOR, ${nombreEmp}</b> POR LA PRESTACIÓN DE SERVICIOS PERSONALES SUBORDINADOS CON LA EMPRESA ${empresaTxt}.</p>
+      <p style="margin-top:10px;">Recibí de la Empresa ${empresaTxt} la cantidad de $${fmtMoney(total)} SON ${totalLetrasTxt} por concepto de pago total y finiquito de cualesquiera prestaciones legales y contractuales a las que pudiera haber tenido derecho en términos de Ley y al contrato individual, en virtud de que con esta fecha he renunciado en forma voluntaria a mi trabajo que venía desempeñando como empleado de <b>${puestoTxt}</b>, teniendo como antigüedad a partir del ${antiguedadTxt}. En el que percibía un salario diario la cantidad de $${fmtMoney(salarioDiario)} SON ${sueldoLetrasTxt} y con un horario de labores ${horarioTxt}, dentro de una jornada y horario continuo de labores un total de ${resumen.horasSemana} horas a la semana, descansando los días ${resumen.descansoTxt} de cada semana, manifestando que estoy al corriente en la percepción de mis salarios ordinarios devengados, que no se me adeuda nada por concepto de horas extras o extraordinarias, disfrute de vacaciones, pago prima vacacional, séptimos días, aguinaldo, y que he gozado de los descansos semanales y obligatorios que establece la Ley Federal del Trabajo.</p>
+      <p style="margin-top:10px;">De igual manera manifiesto bajo protesta de decir verdad que a la fecha siempre me desempeñé con responsabilidad y puntualidad, así como también manifiesto que durante el tiempo en que duró la relación contractual nunca sufrí accidentes en las instalaciones y tampoco enfermedades, por lo que no existe reserva de acción o derecho en contra de quien fuera mi patrón la Empresa ${empresaTxt}.</p>
+      <p style="margin-top:14px;"><b>La cantidad por concepto de Finiquito se desglosa de la siguiente manera:</b></p>
+      <table style="margin-top:8px;"><thead><tr><th>CONCEPTO</th><th style="text-align:right;">IMPORTE</th></tr></thead><tbody>
+        ${filas}
+        <tr><td><b>TOTAL</b></td><td class="mono" style="text-align:right;"><b>$${fmtMoney(total)}</b></td></tr>
+      </tbody></table>
+      <p style="margin-top:14px;">Ratifico en todos y cada uno de sus términos la presente liquidación por ello no me reservo acción o derecho alguno que ejercitar en contra, por lo que doy el más amplio recibo saldo finiquito que a sus intereses representen.</p>
+      <p style="margin-top:10px;">Sin más por el momento reitero a Ustedes las atenciones prestadas.</p>
+      <div style="margin-top:44px; text-align:center;">
+        <p style="margin:0;"><b>ATENTAMENTE</b></p>
+        <p style="margin:4px 0 0;">${nombreEmp}</p>
+        <div class="sig-line" style="max-width:280px; margin:44px auto 0;"></div>
+        <div class="sig-label">(Nombre y Firma)</div>
+      </div>
+    </div>
+  `;
+}
+function renderBajaConceptosTable(conceptos){
+  const body = document.getElementById('bajaConceptosBody');
+  body.innerHTML = conceptos.map((c,i)=>`<tr>
+    <td><input type="text" value="${c.nombre}" data-idx="${i}" class="baja-concepto-nombre" style="width:100%;"></td>
+    <td><input type="number" step="0.01" value="${c.monto}" data-idx="${i}" class="baja-concepto-monto" style="width:130px;"></td>
+    <td><button class="btn danger small" onclick="removeBajaConcepto(${i})">Eliminar</button></td>
+  </tr>`).join('');
+  body.querySelectorAll('.baja-concepto-nombre').forEach(inp=>inp.addEventListener('input', e=>{
+    BAJA_CONCEPTOS[+e.target.dataset.idx].nombre = e.target.value;
+  }));
+  body.querySelectorAll('.baja-concepto-monto').forEach(inp=>inp.addEventListener('input', e=>{
+    BAJA_CONCEPTOS[+e.target.dataset.idx].monto = e.target.value;
+    updateBajaTotal();
+  }));
+  updateBajaTotal();
+}
+let BAJA_CONCEPTOS = [];
+function updateBajaTotal(){
+  const total = BAJA_CONCEPTOS.reduce((s,c)=>s+(+c.monto||0),0);
+  document.getElementById('bajaTotal').innerHTML = `<b>Total: ${fmtMoney(total)}</b>`;
+}
+function removeBajaConcepto(i){
+  BAJA_CONCEPTOS.splice(i,1);
+  renderBajaConceptosTable(BAJA_CONCEPTOS);
+}
+document.getElementById('btnAddConcepto').addEventListener('click', ()=>{
+  BAJA_CONCEPTOS.push({ nombre:'', monto:'' });
+  renderBajaConceptosTable(BAJA_CONCEPTOS);
+});
+function refreshBajaEmpleadoSelect(){
+  const sel = document.getElementById('bajaEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = allKnownEmployeeIds();
+  sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+document.getElementById('bajaEmpleado').addEventListener('change', ()=>{
+  const id = document.getElementById('bajaEmpleado').value;
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  document.getElementById('btnImprimirRenuncia').disabled = true;
+  document.getElementById('btnImprimirFiniquito').disabled = true;
+  document.getElementById('bajaMsg').textContent = '';
+  if(emp && emp.separacion){
+    document.getElementById('bajaFecha').value = emp.separacion.fecha;
+    document.getElementById('bajaSalario').value = emp.separacion.salarioDiario;
+    BAJA_CONCEPTOS = emp.separacion.conceptos.map(c=>({...c}));
+    document.getElementById('bajaMsg').textContent = 'Este empleado ya tiene datos de baja guardados.';
+    document.getElementById('btnImprimirRenuncia').disabled = false;
+    document.getElementById('btnImprimirFiniquito').disabled = false;
+  } else {
+    document.getElementById('bajaFecha').value = isoDate(new Date());
+    document.getElementById('bajaSalario').value = (emp && emp.contrato) ? emp.contrato.sueldoDiario : '';
+    BAJA_CONCEPTOS = FINIQUITO_CONCEPTOS_DEFAULT.map(n=>({ nombre:n, monto:'' }));
+  }
+  renderBajaConceptosTable(BAJA_CONCEPTOS);
+});
+document.getElementById('btnGuardarBaja').addEventListener('click', ()=>{
+  const id = document.getElementById('bajaEmpleado').value;
+  const fecha = document.getElementById('bajaFecha').value;
+  const salarioDiario = +document.getElementById('bajaSalario').value || 0;
+  if(!id){ toast('Elige un empleado.'); return; }
+  if(!fecha){ toast('Elige la fecha de renuncia.'); return; }
+  const idx = EMPLOYEES.findIndex(e=>e.id===id);
+  if(idx===-1){ toast('Ese empleado no está en el directorio.'); return; }
+  EMPLOYEES[idx].separacion = { fecha, salarioDiario, conceptos: BAJA_CONCEPTOS.map(c=>({...c})) };
+  saveStorage();
+  document.getElementById('btnImprimirRenuncia').disabled = false;
+  document.getElementById('btnImprimirFiniquito').disabled = false;
+  document.getElementById('bajaMsg').textContent = 'Datos guardados en la ficha del empleado.';
+  toast('Datos de baja guardados.');
+});
+document.getElementById('btnImprimirRenuncia').addEventListener('click', ()=>{
+  const id = document.getElementById('bajaEmpleado').value;
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp || !emp.separacion) return;
+  document.getElementById('printArea').innerHTML = renunciaHtml(emp, emp.separacion.fecha, emp.separacion.salarioDiario);
+  window.print();
+});
+document.getElementById('btnImprimirFiniquito').addEventListener('click', ()=>{
+  const id = document.getElementById('bajaEmpleado').value;
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp || !emp.separacion) return;
+  document.getElementById('printArea').innerHTML = finiquitoHtml(emp, emp.separacion.fecha, emp.separacion.salarioDiario, emp.separacion.conceptos);
+  window.print();
+});
 function refreshContratoEmpleadoSelect(){
   const sel = document.getElementById('ctrEmpleado');
   if(!sel) return;
