@@ -591,7 +591,12 @@
         <label>Sueldo diario</label>
         <input type="number" id="ctrSueldoDiario" min="0" step="0.01" placeholder="Ej. 504.98">
       </div>
+      <div class="field">
+        <label>Fecha de celebración de este contrato</label>
+        <input type="date" id="ctrFechaCelebracion">
+      </div>
     </div>
+    <p class="sub" style="margin-top:4px;">Esta fecha es la que aparece como "día de la celebración" del contrato (punto 6). La antigüedad sigue tomando siempre la fecha de contratación de la ficha del empleado, aunque generes un contrato nuevo después.</p>
     <div class="hint" id="ctrLetras" style="margin-top:12px;">Escribe el sueldo diario para ver la cantidad en letras.</div>
 
     <div class="row" style="margin-top:16px;">
@@ -2454,14 +2459,16 @@ function horarioTextoDesdeTurno(turnoId){
   });
   return partes.length ? partes.join(', ') : '________________________________';
 }
-function contratoHtml(emp, tipo, pago, sueldoDiario){
+function contratoHtml(emp, tipo, pago, sueldoDiario, fechaCelebracion){
   const nombreEmp = emp.nombre.toUpperCase();
   const empresaTxt = CONFIG.empresaNombre || '________________________________';
   const domicilioTxt = CONFIG.empresaLugar || '________________________________';
   const rfcPatron = CONFIG.rfc || '____________';
   const curpPatron = CONFIG.curp || '____________';
-  const fechaContrato = emp.fecha ? new Date(emp.fecha+'T00:00:00') : new Date();
-  const fechaContratoTxt = fechaLarga(fechaContrato);
+  const fechaAntiguedad = emp.fecha ? new Date(emp.fecha+'T00:00:00') : new Date();
+  const fechaAntiguedadTxt = fechaLarga(fechaAntiguedad);
+  const fechaCelebracionDate = fechaCelebracion ? new Date(fechaCelebracion+'T00:00:00') : fechaAntiguedad;
+  const fechaContratoTxt = fechaLarga(fechaCelebracionDate);
   const fechaNacTxt = emp.fechaNac ? fechaLarga(new Date(emp.fechaNac+'T00:00:00')) : '____________________';
   const sexoTxt = emp.sexo || '____________';
   const estadoCivilTxt = emp.estadoCivil || '____________';
@@ -2492,9 +2499,9 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
     </div>` : '';
 
   return `
-    <div class="pagina-oficio" style="max-width:760px; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
+    <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:13pt; line-height:1.5; text-align:justify;">
       ${logoBlock}
-      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15pt; letter-spacing:.03em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
+      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:17pt; letter-spacing:.03em; margin-bottom:18px;"><b>CONTRATO INDIVIDUAL DE TRABAJO</b></h1>
       <p>Que celebran por una parte la empresa denominada <b>${empresaTxt}</b>, y por la otra el C. <b>${nombreEmp}</b>, bajo las siguientes generalidades y cláusulas:</p>
       <p style="text-align:center; margin-top:14px;"><b>G E N E R A L I D A D E S</b></p>
       <p><b>1.-</b> <b>${empresaTxt}</b>, es una persona física debidamente registrada ante el SAT, teniendo su domicilio en ${domicilioTxt}, con Registro Federal de Contribuyentes <b>${rfcPatron}</b>, con CURP <b>${curpPatron}</b> y por tal con capacidad para obligarse, y a quien en lo sucesivo y para los efectos del presente contrato, se le denominará <b>PATRÓN</b>.</p>
@@ -2514,7 +2521,7 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
       <p><b>SÉPTIMA: DESCUENTOS AL SALARIO.</b>- Únicamente se descontarán de las percepciones que vaya obteniendo el trabajador con motivo de su trabajo, lo que expresamente está permitido por la Ley Federal del Trabajo y que además se haya acordado por las partes. Tomando en cuenta que de acuerdo con la Ley el patrón es retenedor de impuestos y aportaciones que se causan por el pago de prestaciones laborales, el trabajador expresamente autoriza a su patrón para que se le descuente del salario en los recibos correspondientes con las abreviaturas que la Ley indica, ISPT (Impuesto sobre productos del trabajo), ISR (Impuesto sobre la renta), así como las aportaciones que se realicen ante el INSTITUTO MEXICANO DEL SEGURO SOCIAL (IMSS) AFORES (Administradoras de Fondo para el Retiro), aportaciones al INSTITUTO DEL FONDO NACIONAL PARA LA VIVIENDA DE LOS TRABAJADORES (INFONAVIT) por aportaciones, SAR y Créditos Otorgados (Sistema de Ahorro para el Retiro), INFONACOT (Instituto Fondo Nacional para el Consumo de los Trabajadores), pago de créditos en el porcentaje que la dependencia le informe al patrón, cuando se le hayan otorgado créditos al trabajador por este organismo, así como otros competentes.</p>
       <p><b>OCTAVA.</b>- Ambas partes convenimos que para el desarrollo del trabajo, el patrón le proporcionará al trabajador la herramienta, utensilios y material para el desempeño del mismo, comprometiéndose éste a utilizar adecuadamente los mismos, pues en caso de pérdida o daños, que se realicen por descuido o imprudencia del trabajador, éste será el responsable para restituir el costo de los mismos al patrón, y por tal cubrirá el pago de las pérdidas o averías que produzca, descuentos que se le irán realizando al trabajador por una cantidad no mayor del 30% del excedente del salario mínimo, no así el deterioro que en forma normal y ordinaria vaya sufriendo la herramienta del equipo del trabajo por uso apropiado del mismo.</p>
       <p><b>NOVENA.</b>- Ambas partes convenimos que con motivo de las percepciones que se le vienen haciendo al trabajador, el patrón está en la posibilidad de pagar cantidades superiores por errores, y cuando esto suceda el trabajador acepta que se le descuenten, apareciendo en el recibo de pago como pagos hechos con exceso al trabajador por errores.</p>
-      <p><b>DÉCIMA: DE LA ANTIGÜEDAD.</b>- La antigüedad del trabajador empieza a partir del día <b>${fechaContratoTxt}</b>.</p>
+      <p><b>DÉCIMA: DE LA ANTIGÜEDAD.</b>- La antigüedad del trabajador empieza a partir del día <b>${fechaAntiguedadTxt}</b>.</p>
       <p><b>DÉCIMA PRIMERA.</b>- El TRABAJADOR se obliga a checar tarjeta o firmar las listas de asistencia respectivas a la entrada y salida de sus labores, el incumplimiento de este requisito se computará como falta injustificada para los efectos legales a que hay lugar.</p>
       <p><b>DÉCIMA SEGUNDA.</b>- El día señalado como descanso semanal y por concepto de séptimo día, se podrá modificar por el patrón, cuando sea necesario y siempre y cuando se siga otorgando esta prestación al trabajador, en cualquier otro día a la semana.</p>
       <p><b>DÉCIMA TERCERA.</b>- Ambas partes declaran que conocen sus obligaciones y prohibiciones, por lo que respecta al Patrón los artículos 132 y 133 de la Ley Federal del Trabajo y por lo que se refiere al Trabajador los artículos 134 y 135 de dicho ordenamiento legal.</p>
@@ -2529,7 +2536,7 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
       <p><b>VIGÉSIMA SEGUNDA.</b>- Con motivo de las funciones desarrolladas, EL EMPLEADO reconoce que tiene acceso a información privilegiada incluyendo secretos comerciales, de diseño, comercialización y a diversa información y documentación de carácter confidencial y exclusivo de EL PATRÓN y/o de sus clientes y/o de terceros, debiéndose entender como información confidencial la información de cualquier carácter o naturaleza, propiedad de EL PATRÓN, y/o sus clientes y/o de terceros, incluyendo en forma enunciativa y no limitativa, información de carácter económico, financiero, bancario, proveedores, clientes, técnico, montos de consumo de servicios tales como luz, agua, gas, teléfono, procesos de operación, contacto de clientes, materias primas, sistemas, bases de datos, estadísticas, prácticas, estrategias, metodología, políticas, planes, proyecciones y cualquier otra que sea necesaria para el desarrollo de los Proyectos; así mismo se deberá entender por secretos industriales aquella información que cumpla con todos los requisitos de la legislación aplicable para dicha información, entre otras la información de aplicación industrial o comercial que guarde EL PATRÓN, y/o sus clientes y/o terceros, con carácter confidencial, que les signifique obtener o mantener una ventaja competitiva o económica frente a terceros en la realización de sus actividades económicas y respecto de la cual hayan adoptado los medios o sistemas suficientes para preservar su confidencialidad y el acceso restringido a la misma y se refiera necesariamente a la naturaleza, características o finalidades de los productos, métodos o procesos de producción, medios o formas de distribución o comercialización de productos o prestación de servicios.</p>
       <p>En virtud de lo anterior, EL TRABAJADOR se obliga sin limitación alguna a no divulgar, ni utilizar en su provecho o de terceros, la Información Confidencial y/o los Secretos Industriales que en su caso conozca de EL PATRÓN y/o de sus clientes y/o de terceros, así como de los hechos o esencia de todas las actividades que realizará con motivo de la colaboración con EL PATRÓN, en la realización de los Proyectos y en general en la realización de sus actividades laborales, y asimismo se obliga a no publicar, revelar o divulgar por cualquier medio y abstenerse de realizar cualquier declaración pública o divulgación particular, presente o futura al respecto y en relación directa o indirecta con la Información Confidencial y/o los Secretos Industriales y en general con toda la información de cualquier naturaleza que le fuera revelada o conozca con motivo del desarrollo de los Proyectos y en general la realización de sus labores.</p>
 
-      <p style="margin-top:18px;">AMBAS PARTES QUE CONTRATAN, ENTERADOS DEL CONTENIDO Y ALCANCE DE LAS CLÁUSULAS QUE CONTIENE EL PRESENTE CONTRATO, LO FIRMAN DE ENTERA CONFORMIDAD, HACIÉNDOLO EN PRESENCIA DE DOS PERSONAS QUE COMO TESTIGOS COMPARECEN A LA FIRMA DEL PRESENTE CONTRATO.</p>
+      <p style="margin-top:20px; font-size:1.15em;"><b>AMBAS PARTES QUE CONTRATAN, ENTERADOS DEL CONTENIDO Y ALCANCE DE LAS CLÁUSULAS QUE CONTIENE EL PRESENTE CONTRATO, LO FIRMAN DE ENTERA CONFORMIDAD, HACIÉNDOLO EN PRESENCIA DE DOS PERSONAS QUE COMO TESTIGOS COMPARECEN A LA FIRMA DEL PRESENTE CONTRATO.</b></p>
 
       <div class="sig-row" style="margin-top:46px; page-break-inside: avoid; break-inside: avoid;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>PATRÓN</b><br>${empresaTxt}</div></div>
@@ -2540,7 +2547,7 @@ function contratoHtml(emp, tipo, pago, sueldoDiario){
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGO</b></div></div>
       </div>
 
-      <div style="page-break-inside: avoid; break-inside: avoid;">
+      <div style="page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid;">
         <p style="margin-top:44px; text-align:justify;">Expreso por medio de este documento que la empresa ${empresaTxt} me proporciono el contrato individual de trabajo original debidamente firmado, así como el reglamento interior de trabajo, y que estoy de acuerdo en cumplir con sus disposiciones, asi como las de orden tecnico y adminstrativo que dicte la empresa ya sea en el momento de mi entrada a esta, o en forma posterior.</p>
         <div style="margin-top:50px; text-align:center;">
           <div>${nombreEmp}</div>
@@ -2575,9 +2582,11 @@ document.getElementById('ctrEmpleado').addEventListener('change', ()=>{
     document.getElementById('ctrTipo').value = emp.contrato.tipo;
     document.getElementById('ctrPago').value = emp.contrato.pago;
     document.getElementById('ctrSueldoDiario').value = emp.contrato.sueldoDiario;
+    document.getElementById('ctrFechaCelebracion').value = emp.contrato.fechaCelebracion || emp.fecha || isoDate(new Date());
     updateCtrLetras();
-    document.getElementById('ctrMsg').textContent = 'Este empleado ya tiene un contrato guardado — puedes generarlo de nuevo si algo cambió.';
+    document.getElementById('ctrMsg').textContent = 'Este empleado ya tiene un contrato guardado — puedes generar uno nuevo (por ejemplo, al pasar de prueba a indeterminado) cambiando la fecha de celebración.';
   } else {
+    document.getElementById('ctrFechaCelebracion').value = (emp && emp.fecha) ? emp.fecha : isoDate(new Date());
     document.getElementById('ctrMsg').textContent = '';
     updateCtrLetras();
   }
@@ -2587,13 +2596,15 @@ document.getElementById('btnGenContrato').addEventListener('click', ()=>{
   const tipo = document.getElementById('ctrTipo').value;
   const pago = document.getElementById('ctrPago').value;
   const sueldoDiario = +document.getElementById('ctrSueldoDiario').value || 0;
+  const fechaCelebracion = document.getElementById('ctrFechaCelebracion').value;
   if(!id){ toast('Elige un empleado.'); return; }
   if(!sueldoDiario){ toast('Escribe el sueldo diario.'); return; }
+  if(!fechaCelebracion){ toast('Elige la fecha de celebración del contrato.'); return; }
   const idx = EMPLOYEES.findIndex(e=>e.id===id);
   if(idx===-1){ toast('Ese empleado no está en el directorio. Dalo de alta primero en "Empleados".'); return; }
-  EMPLOYEES[idx].contrato = { tipo, pago, sueldoDiario, generadoEl: isoDate(new Date()) };
+  EMPLOYEES[idx].contrato = { tipo, pago, sueldoDiario, fechaCelebracion, generadoEl: isoDate(new Date()) };
   saveStorage();
-  const html = contratoHtml(EMPLOYEES[idx], tipo, pago, sueldoDiario);
+  const html = contratoHtml(EMPLOYEES[idx], tipo, pago, sueldoDiario, fechaCelebracion);
   document.getElementById('ctrArea').innerHTML = html;
   document.getElementById('btnPrintContrato').disabled = false;
   document.getElementById('ctrMsg').textContent = 'Contrato guardado en la ficha del empleado.';
