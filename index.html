@@ -310,8 +310,13 @@
         <label>Agrupar por</label>
         <select id="dashAgrupar">
           <option value="depto" selected>Departamento</option>
-          <option value="empleado">Empleado</option>
+          <option value="empleado">Empleado (todos)</option>
+          <option value="individual">Un empleado (detalle)</option>
         </select>
+      </div>
+      <div class="field" id="dashIndividualWrap" style="display:none;">
+        <label>Empleado</label>
+        <select id="dashIndividualEmpleado"></select>
       </div>
       <button class="btn" id="btnDashRefresh">Actualizar</button>
     </div>
@@ -320,46 +325,56 @@
 
     <div id="dashKpis" class="stat-grid" style="margin-top:6px;"></div>
 
-    <div class="dash-card" style="margin-top:6px;">
-      <h3 style="margin-top:0;">Tendencia de horas trabajadas (últimas 8 semanas)</h3>
-      <p class="sub" style="margin-bottom:6px;">Haz clic en un punto para ver el detalle de esa semana.</p>
-      <div id="dashTrend"></div>
-    </div>
-
     <div class="dash-grid">
       <div class="dash-card">
-        <h3 id="dashChartHorasTitle" style="margin-top:0;">Horas por departamento</h3>
-        <div id="dashChartHoras"></div>
-      </div>
-      <div class="dash-card">
-        <h3 id="dashChartIncTitle" style="margin-top:0;">Retardos y faltas por departamento</h3>
-        <div id="dashChartIncidencias"></div>
+        <h3 style="margin-top:0;">Tendencia de horas trabajadas (últimas 8 semanas)</h3>
+        <p class="sub" style="margin-bottom:6px;">Haz clic en un punto para ver el detalle de esa semana.</p>
+        <div id="dashTrend"></div>
       </div>
     </div>
 
-    <div class="row" style="margin-top:8px; align-items:center;">
-      <h3 id="dashTableTitle" style="margin:0;">Desglose por departamento</h3>
-      <div class="field" style="margin-left:auto; min-width:180px;">
-        <label>Ordenar por</label>
-        <select id="dashOrden">
-          <option value="horas">Horas totales</option>
-          <option value="incidencias">Retardos + faltas</option>
-          <option value="nombre">Nombre (A-Z)</option>
-        </select>
+    <div id="dashGroupSections">
+      <div class="dash-grid">
+        <div class="dash-card">
+          <h3 id="dashChartHorasTitle" style="margin-top:0;">Horas por departamento</h3>
+          <div id="dashChartHoras"></div>
+        </div>
+        <div class="dash-card">
+          <h3 id="dashChartIncTitle" style="margin-top:0;">Retardos y faltas por departamento</h3>
+          <div id="dashChartIncidencias"></div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:8px; align-items:center;">
+        <h3 id="dashTableTitle" style="margin:0;">Desglose por departamento</h3>
+        <div class="field" style="margin-left:auto; min-width:180px;">
+          <label>Ordenar por</label>
+          <select id="dashOrden">
+            <option value="horas">Horas totales</option>
+            <option value="incidencias">Retardos + faltas</option>
+            <option value="nombre">Nombre (A-Z)</option>
+          </select>
+        </div>
+      </div>
+      <p class="sub" style="margin-top:4px;">Haz clic en una fila o barra para profundizar.</p>
+      <div id="dashDeptoTable"></div>
+
+      <div class="dash-grid" style="margin-top:6px;">
+        <div class="dash-card">
+          <h3 style="margin-top:0;">Más horas extra</h3>
+          <div id="dashTopExtra"></div>
+        </div>
+        <div class="dash-card">
+          <h3 style="margin-top:0;">Más retardos y faltas</h3>
+          <div id="dashTopIncidencias"></div>
+        </div>
       </div>
     </div>
-    <p class="sub" style="margin-top:4px;">Haz clic en una fila o barra para profundizar.</p>
-    <div id="dashDeptoTable"></div>
 
-    <div class="dash-grid" style="margin-top:6px;">
-      <div class="dash-card">
-        <h3 style="margin-top:0;">Más horas extra</h3>
-        <div id="dashTopExtra"></div>
-      </div>
-      <div class="dash-card">
-        <h3 style="margin-top:0;">Más retardos y faltas</h3>
-        <div id="dashTopIncidencias"></div>
-      </div>
+    <div id="dashIndividualSection" style="display:none;">
+      <div id="dashIndividualStats"></div>
+      <h3 style="margin-top:22px;">Detalle día por día</h3>
+      <div id="dashIndividualTable"></div>
     </div>
   </section>
 
@@ -1552,6 +1567,10 @@ function refreshAllEmployeeSelects(){
   if(document.getElementById('frModo').value==='some'){
     renderFRCheckList(document.getElementById('frBuscar').value);
   }
+
+  const dashInd = document.getElementById('dashIndividualEmpleado'); const dashIndCur = dashInd.value;
+  dashInd.innerHTML = ids.length ? opts : '<option value="">-- sin empleados --</option>';
+  if(ids.includes(dashIndCur)) dashInd.value = dashIndCur;
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -2109,7 +2128,14 @@ document.getElementById('dashPeriodo').addEventListener('change', ()=>{
 });
 document.getElementById('dashDesde').addEventListener('change', ()=>{ if(document.getElementById('dashPeriodo').value==='custom') renderDashboard(); });
 document.getElementById('dashHasta').addEventListener('change', ()=>{ if(document.getElementById('dashPeriodo').value==='custom') renderDashboard(); });
-document.getElementById('dashAgrupar').addEventListener('change', renderDashboard);
+document.getElementById('dashAgrupar').addEventListener('change', ()=>{
+  const mode = document.getElementById('dashAgrupar').value;
+  document.getElementById('dashIndividualWrap').style.display = mode==='individual' ? 'flex' : 'none';
+  renderDashboard();
+});
+document.getElementById('dashIndividualEmpleado').addEventListener('change', ()=>{
+  if(document.getElementById('dashAgrupar').value==='individual') renderDashboard();
+});
 document.getElementById('dashOrden').addEventListener('change', renderDashboard);
 document.getElementById('btnDashRefresh').addEventListener('click', renderDashboard);
 let DASH_FILTER_DEPTO = null;
@@ -2270,6 +2296,37 @@ function trendChartSvg(weeks, values){
     ${dots}${valueLabels}${dateLabels}
   </svg>`;
 }
+function renderDashboardIndividual(id, from, to){
+  const chipArea = document.getElementById('dashFilterChip');
+  chipArea.style.display = 'none';
+  chipArea.innerHTML = '';
+
+  if(!id){
+    document.getElementById('dashKpis').innerHTML = '';
+    document.getElementById('dashTrend').innerHTML = emptyState('Elige un empleado para ver su comportamiento individual.');
+    document.getElementById('dashIndividualStats').innerHTML = '';
+    document.getElementById('dashIndividualTable').innerHTML = '';
+    return;
+  }
+
+  const rep = computeReportData(id, from, to);
+
+  document.getElementById('dashKpis').innerHTML = `
+    <div class="stat"><div class="n">${fmtHM(rep.totalMins)}</div><div class="l">Horas totales</div></div>
+    <div class="stat"><div class="n">${fmtHM(rep.totalExtraMins)}</div><div class="l">Horas extra</div></div>
+    <div class="stat"><div class="n">${rep.retardos}</div><div class="l">Retardos</div></div>
+    <div class="stat"><div class="n">${rep.faltas}</div><div class="l">Faltas</div></div>
+    <div class="stat"><div class="n">${rep.puntual ? 'Sí' : 'No'}</div><div class="l">Puntualidad perfecta</div></div>
+    <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
+  `;
+
+  const trendWeeks = buildTrendWeeks(to);
+  const trendValues = trendWeeks.map(wk => computeEmployeePeriod(id, wk.from, wk.to).totalMins/60);
+  document.getElementById('dashTrend').innerHTML = trendChartSvg(trendWeeks, trendValues);
+
+  document.getElementById('dashIndividualStats').innerHTML = `<h3 style="margin-top:14px;">${rep.nombre} <span style="font-weight:400; color:#7f93ac;">(${rep.id})</span></h3>` + reportStatsHtml(rep);
+  document.getElementById('dashIndividualTable').innerHTML = reportTableHtml(rep);
+}
 function renderDashboard(){
   const kind = document.getElementById('dashPeriodo').value;
   let from, to;
@@ -2284,8 +2341,17 @@ function renderDashboard(){
     document.getElementById('dashHasta').value = to;
   }
 
-  const data = computeDashboardData(from, to);
   const mode = document.getElementById('dashAgrupar').value;
+  document.getElementById('dashGroupSections').style.display = mode==='individual' ? 'none' : 'block';
+  document.getElementById('dashIndividualSection').style.display = mode==='individual' ? 'block' : 'none';
+
+  if(mode==='individual'){
+    const id = document.getElementById('dashIndividualEmpleado').value;
+    renderDashboardIndividual(id, from, to);
+    return;
+  }
+
+  const data = computeDashboardData(from, to);
   const orden = document.getElementById('dashOrden').value;
 
   const chipArea = document.getElementById('dashFilterChip');
