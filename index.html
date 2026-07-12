@@ -2085,15 +2085,15 @@ function getScheduleFor(id, fecha){
     const t = TURNOS.find(x=>x.id===emp.turnoId);
     if(t && t.dias && t.dias[dow]){
       const d = t.dias[dow];
-      if(!d.activo) return { activo:false, entrada:null, tolerancia:t.tolerancia||0, expectedMins:0, overnight:false };
+      if(!d.activo) return { activo:false, entrada:null, salidaFinal:null, tolerancia:t.tolerancia||0, expectedMins:0, overnight:false };
       const expectedMins = minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
       const finalSalida = d.salida2 || d.salida1;
       const overnight = !!(d.entrada && finalSalida && timeToMins(finalSalida) <= timeToMins(d.entrada));
-      return { activo:true, entrada:d.entrada||null, tolerancia:t.tolerancia||0, expectedMins, overnight };
+      return { activo:true, entrada:d.entrada||null, salidaFinal:finalSalida||null, tolerancia:t.tolerancia||0, expectedMins, overnight };
     }
   }
   const activo = CONFIG.dias.includes(dow);
-  return { activo, entrada: CONFIG.entrada, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0, overnight:false };
+  return { activo, entrada: CONFIG.entrada, salidaFinal:null, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0, overnight:false };
 }
 function isLate(id, dayPunches, fecha){
   if(!dayPunches.length) return false;
@@ -2349,6 +2349,10 @@ function reportTableHtml(rep){
       const btnLabel = r.pago.autorizado ? 'Quitar autorización' : 'Autorizar';
       extraCell = `<div>${fmtHM(r.pago.extraMins)}</div><div style="margin-top:3px;">${authTag}</div><button class="btn secondary small" style="margin-top:5px;" onclick="toggleAutorizacion('${rep.id}','${r.fecha}')">${btnLabel}</button>`;
     }
+    const abandonoMins = r.status==='ok' ? getAbandonoMinutos(rep.id, r.info.punches, r.fecha) : 0;
+    const abandonoBtn = abandonoMins>0
+      ? `<br><span class="tag late" title="Salió antes de su hora de salida programada">Salida anticipada · ${abandonoMins} min</span><br><button class="btn secondary small" style="margin-top:5px;" onclick="printActaAbandono('${rep.id}','${r.fecha}')">Generar acta por abandono</button>`
+      : '';
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
       <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}</td>
@@ -2356,7 +2360,7 @@ function reportTableHtml(rep){
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
       <td class="mono">${rep.sueldoHora ? fmtMoney(r.pago.pagoTotal) : '—'}</td>
-      <td><span class="tag ${r.status}">${r.label}</span>${r.status==='absent' ? `<br><button class="btn secondary small" style="margin-top:5px;" onclick="printActa('${rep.id}','${r.fecha}')">Generar acta</button>` : ''}</td>
+      <td><span class="tag ${r.status}">${r.label}</span>${r.status==='absent' ? `<br><button class="btn secondary small" style="margin-top:5px;" onclick="printActa('${rep.id}','${r.fecha}')">Generar acta</button>` : ''}${abandonoBtn}</td>
     </tr>`;
   });
   html += `</tbody></table>`;
@@ -2505,6 +2509,23 @@ function getLateMinutes(id, dayPunches, fecha){
   const limitMins = eh*60+em+sched.tolerancia;
   const actualMins = d.getHours()*60+d.getMinutes();
   return Math.max(0, actualMins - limitMins);
+}
+function scheduledEndTs(id, fecha){
+  const sched = getScheduleFor(id, fecha);
+  if(!sched.activo || !sched.salidaFinal) return null;
+  const dayOffset = sched.overnight ? 1 : 0;
+  return new Date(fecha+'T00:00:00').getTime() + dayOffset*86400000 + timeToMins(sched.salidaFinal)*60000;
+}
+function getAbandonoMinutos(id, dayPunches, fecha){
+  // Solo cuenta si hay un número par de checadas (una salida "de cierre" clara) y esa salida
+  // ocurrió antes de la hora de salida programada, con más de la tolerancia del turno.
+  if(dayPunches.length < 2 || dayPunches.length % 2 !== 0) return 0;
+  const endTs = scheduledEndTs(id, fecha);
+  if(!endTs) return 0;
+  const sched = getScheduleFor(id, fecha);
+  const lastPunch = dayPunches[dayPunches.length-1];
+  const diffMins = Math.round((endTs - lastPunch.ts)/60000);
+  return diffMins > (sched.tolerancia||0) ? diffMins : 0;
 }
 document.getElementById('btnGenFR').addEventListener('click', ()=>{
   const ids = getSelectedIdsFR();
@@ -2804,6 +2825,53 @@ function reporteRetardoHtml(id, fecha){
 }
 function printReporteRetardo(id, fecha){
   document.getElementById('printArea').innerHTML = reporteRetardoHtml(id, fecha);
+  window.print();
+}
+function actaAbandonoHtml(id, fecha){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const nombre = employeeDisplayName(id);
+  const puesto = (emp && emp.puesto) ? emp.puesto : '________________________';
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const domicilioTxt = CONFIG.empresaLugar || '________________________________________________';
+  const lugarTexto = `Oficinas de ${empresaTxt}, ubicadas en ${domicilioTxt}.`;
+  const now = new Date();
+  const dFecha = new Date(fecha+'T00:00:00');
+  const info = computeDay(id, fecha);
+  const sched = getScheduleFor(id, fecha);
+  const abandonoMins = getAbandonoMinutos(id, info.punches, fecha);
+  const horaSalidaReal = info.punches.length ? info.punches[info.punches.length-1].hora.slice(0,5) : '—';
+  const horaSalidaProgramada = sched.salidaFinal || '—';
+  return `
+    <div style="max-width:720px; margin:0 auto; font-size:13.5px; line-height:1.75;">
+      <h1 style="text-align:center; font-family:var(--display); font-weight:700; font-size:19px; letter-spacing:.05em; margin-bottom:24px;"><b>ACTA ADMINISTRATIVA</b></h1>
+      <p><b>Fecha</b> y Hora: <b>${fechaLarga(now)}</b>, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
+      <p><b>Lugar:</b> ${lugarTexto}</p>
+      <p><b>Asistentes:</b> Los abajo firmantes.</p>
+
+      <p style="margin-top:20px;"><b>Hechos Constatados:</b></p>
+      <p>Se hace constar que <b>${nombre}</b>, con el puesto de ${puesto}, el día <b>${fechaLarga(dFecha)}</b>, abandonó su lugar de trabajo antes de la hora de salida establecida, registrando su última checada a las <b>${horaSalidaReal}</b> horas, siendo su horario de salida establecido las <b>${horaSalidaProgramada}</b> horas, por lo que se retiró aproximadamente <b>${abandonoMins} minutos</b> antes de concluir su jornada laboral, sin autorización ni justificación alguna de su superior inmediato.</p>
+      <p style="margin-top:12px;">En Recursos Humanos no se presentó ningún permiso escrito ni justificante válido que avalara su salida anticipada, ni se entregó documento firmado por su superior inmediato autorizando su retiro. Tampoco proporcionó una explicación posterior que justificara su acción.</p>
+
+      <p style="margin-top:20px;"><b>Determinación:</b></p>
+      <p>Debido a lo anterior, y en cumplimiento con los lineamientos internos de la empresa, se registra un <b>ABANDONO DE TRABAJO</b> en su expediente laboral.</p>
+
+      <p style="margin-top:20px;"><b>Objetivo del Acta:</b></p>
+      <p>La presente acta administrativa se levanta para dejar constancia formal de los hechos y notificar a <b>${nombre}</b> sobre esta incidencia, conforme a los procedimientos establecidos.</p>
+
+      <p style="margin-top:34px;"><b>Firmas de Constatación:</b></p>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR INVOLUCRADO</b><br>${nombre}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>RECURSOS HUMANOS</b></div></div>
+      </div>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
+      </div>
+    </div>
+  `;
+}
+function printActaAbandono(id, fecha){
+  document.getElementById('printArea').innerHTML = actaAbandonoHtml(id, fecha);
   window.print();
 }
 /* ---------- número a letras (para el sueldo diario en los contratos) ---------- */
