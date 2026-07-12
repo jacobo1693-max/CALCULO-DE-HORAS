@@ -2569,23 +2569,29 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
     html += `</tbody></table>`;
   }
 
-  const weekGroups = {};
+  const retardosPorEmpleado = {};
   rows.filter(r=>r.tipo==='Retardo').forEach(r=>{
-    const wk = mondayWeekRange(r.fecha);
-    const key = r.id+'|'+wk.from;
-    if(!weekGroups[key]) weekGroups[key] = { id:r.id, nombre:r.nombre, from:wk.from, to:wk.to, count:0 };
-    weekGroups[key].count++;
+    if(!retardosPorEmpleado[r.id]) retardosPorEmpleado[r.id] = { nombre:r.nombre, fechas:[] };
+    retardosPorEmpleado[r.id].fechas.push(r.fecha);
   });
-  const alertas = Object.values(weekGroups).filter(g=>g.count>=3).sort((a,b)=>b.count-a.count);
+  const alertas = [];
+  Object.entries(retardosPorEmpleado).forEach(([id,info])=>{
+    const fechas = [...info.fechas].sort();
+    findWeeklyClusters(fechas).forEach(c=>{
+      alertas.push({ id, nombre: info.nombre, from: c.from, to: c.to, count: c.count });
+    });
+  });
+  alertas.sort((a,b)=>b.count-a.count);
   if(alertas.length){
-    html += `<h3 style="margin-top:26px;">⚠ Empleados con 3 o más retardos en la misma semana</h3>
+    html += `<h3 style="margin-top:26px;">⚠ Empleados con 3 o más retardos en 7 días</h3>
       <p class="sub">Se sugiere levantar un acta administrativa por retardos reiterados.</p>
-      <table><thead><tr><th>Empleado</th><th>No.</th><th>Semana</th><th>Retardos</th><th></th></tr></thead><tbody>`;
+      <table><thead><tr><th>Empleado</th><th>No.</th><th>Del</th><th>Al</th><th>Retardos</th><th></th></tr></thead><tbody>`;
     alertas.forEach(g=>{
       html += `<tr>
         <td><b>${g.nombre}</b></td>
         <td class="mono">${g.id}</td>
-        <td class="mono">${g.from} al ${g.to}</td>
+        <td class="mono">${g.from}</td>
+        <td class="mono">${g.to}</td>
         <td><span class="tag late">${g.count}</span></td>
         <td><button class="btn secondary small" onclick="printActaRetardos('${escAttr(g.id)}','${g.from}','${g.to}')">Generar acta por retardos</button></td>
       </tr>`;
@@ -2694,6 +2700,24 @@ function mondayWeekRange(fechaStr){
   const monday = new Date(d); monday.setDate(d.getDate()+diffToMonday);
   const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
   return { from: isoDate(monday), to: isoDate(sunday) };
+}
+function findWeeklyClusters(datesSorted){
+  // Busca grupos de 3 o más fechas (ya ordenadas) que caben dentro de cualquier ventana de 7 días seguidos,
+  // sin importar si cruzan de una semana calendario a otra.
+  const clusters = [];
+  let i = 0;
+  while(i < datesSorted.length){
+    const startTs = new Date(datesSorted[i]+'T00:00:00').getTime();
+    let j = i;
+    while(j+1 < datesSorted.length && (new Date(datesSorted[j+1]+'T00:00:00').getTime() - startTs) <= 6*86400000) j++;
+    if(j - i + 1 >= 3){
+      clusters.push({ from: datesSorted[i], to: datesSorted[j], count: j-i+1 });
+      i = j+1;
+    } else {
+      i++;
+    }
+  }
+  return clusters;
 }
 function actaRetardosHtml(id, from, to){
   const emp = EMPLOYEES.find(e=>e.id===id);
