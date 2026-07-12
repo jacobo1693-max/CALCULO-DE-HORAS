@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control de Asistencia · Checador BM160</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -805,6 +808,27 @@
       <button class="btn" id="btnSaveConfig">Guardar configuración</button>
       <span class="sub" id="configMsg" style="margin:0;"></span>
     </div>
+
+    <h2 style="margin-top:34px;">Sincronización en la nube (opcional)</h2>
+    <p class="sub">Por default, los datos solo se guardan en este navegador. Si conectas un proyecto gratuito de Firebase, vas a poder ver los mismos empleados, checadas y reportes desde cualquier computadora, navegador o celular.</p>
+    <div class="form-card">
+      <div class="hint" id="cloudStatus">No conectado — los datos solo se guardan en este navegador.</div>
+      <div class="row" style="margin-top:12px;">
+        <div class="field" style="min-width:260px;"><label>API Key</label><input type="text" id="fbApiKey" placeholder="AIzaSy..."></div>
+        <div class="field" style="min-width:260px;"><label>Auth Domain</label><input type="text" id="fbAuthDomain" placeholder="tu-proyecto.firebaseapp.com"></div>
+        <div class="field" style="min-width:200px;"><label>Project ID</label><input type="text" id="fbProjectId" placeholder="tu-proyecto"></div>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div class="field" style="min-width:260px;"><label>Storage Bucket</label><input type="text" id="fbStorageBucket" placeholder="tu-proyecto.appspot.com"></div>
+        <div class="field" style="min-width:200px;"><label>Messaging Sender ID</label><input type="text" id="fbSenderId" placeholder="123456789"></div>
+        <div class="field" style="min-width:260px;"><label>App ID</label><input type="text" id="fbAppId" placeholder="1:123:web:abc123"></div>
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn" id="btnConnectCloud">Conectar y sincronizar</button>
+        <button class="btn secondary" id="btnDisconnectCloud">Desconectar (usar solo este navegador)</button>
+        <span class="sub" id="cloudMsg" style="margin:0;"></span>
+      </div>
+    </div>
   </section>
 
   <!-- WEEK / PERIOD SUMMARY -->
@@ -1045,6 +1069,71 @@ function parseCombined(v){
 /* ---------- almacenamiento local del navegador ----------
    (persiste de verdad al recargar o actualizar la página, sin depender de nada externo) */
 const LS_PREFIX = 'bm160app_';
+const CLOUD_KEYS = ['bm160-punches','bm160-config','bm160-employees','bm160-turnos','bm160-codigos','bm160-departamentos','bm160-puestos','bm160-autorizaciones'];
+let CLOUD_ENABLED = false;
+let fbDb = null;
+
+function setCloudStatus(msg, ok){
+  const el = document.getElementById('cloudStatus');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = ok ? '#0b6e4f' : '';
+}
+async function cloudHasData(){
+  try{
+    const doc = await fbDb.collection('bm160sync').doc('bm160-employees').get();
+    return doc.exists;
+  }catch(e){ return false; }
+}
+async function cloudPushAll(){
+  for(const key of CLOUD_KEYS){
+    const raw = localStorage.getItem(LS_PREFIX+key);
+    if(raw!=null){
+      try{ await fbDb.collection('bm160sync').doc(key).set({ value: raw, updatedAt: Date.now() }); }
+      catch(e){ console.error('Error subiendo', key, e); }
+    }
+  }
+}
+async function cloudPullAll(){
+  for(const key of CLOUD_KEYS){
+    try{
+      const doc = await fbDb.collection('bm160sync').doc(key).get();
+      if(doc.exists) localStorage.setItem(LS_PREFIX+key, doc.data().value);
+    }catch(e){ console.error('Error descargando', key, e); }
+  }
+}
+async function connectFirebase(cfg, isNewConnection){
+  try{
+    if(firebase.apps && firebase.apps.length){ await firebase.app().delete(); }
+    firebase.initializeApp(cfg);
+    fbDb = firebase.firestore();
+    await firebase.auth().signInAnonymously();
+    CLOUD_ENABLED = true;
+    localStorage.setItem(LS_PREFIX+'firebaseConfig', JSON.stringify(cfg));
+    if(isNewConnection){
+      const hasData = await cloudHasData();
+      if(hasData){ await cloudPullAll(); toast('Conectado — se descargaron los datos que ya había en la nube.'); }
+      else { await cloudPushAll(); toast('Conectado — tus datos de este navegador se subieron a la nube.'); }
+    } else {
+      await cloudPullAll();
+    }
+    setCloudStatus('Conectado — los datos se sincronizan automáticamente entre dispositivos.', true);
+    return true;
+  }catch(e){
+    console.error(e);
+    setCloudStatus('No se pudo conectar. Revisa que las claves sean correctas y que hayas activado Firestore y el inicio de sesión anónimo en tu proyecto.', false);
+    return false;
+  }
+}
+async function initCloudFromSavedConfig(){
+  const raw = localStorage.getItem(LS_PREFIX+'firebaseConfig');
+  if(!raw) return;
+  try{ await connectFirebase(JSON.parse(raw), false); }catch(e){ /* se queda solo local */ }
+}
+
+/* ---------- almacenamiento local del navegador ----------
+   (persiste de verdad al recargar o actualizar la página, sin depender de nada externo;
+   si hay una nube conectada, además sincroniza automáticamente) */
 const storage = {
   async get(key){
     try{
@@ -1055,6 +1144,13 @@ const storage = {
   async set(key, value){
     try{
       localStorage.setItem(LS_PREFIX+key, value);
+      if(CLOUD_ENABLED && fbDb && CLOUD_KEYS.includes(key)){
+        if(value.length > 900000){
+          toast('Aviso: los datos de "'+key.replace('bm160-','')+'" son muy grandes (muchas fotos) y no se pudieron subir a la nube. Se quedaron guardados solo en este navegador.');
+        } else {
+          fbDb.collection('bm160sync').doc(key).set({ value, updatedAt: Date.now() }).catch(e=>console.error('cloud sync error', e));
+        }
+      }
       return { key, value };
     }catch(e){ console.error('No se pudo guardar en el navegador (¿espacio lleno?)', e); return null; }
   },
@@ -1078,6 +1174,7 @@ async function saveStorage(){
   }catch(e){ console.error('storage error', e); }
 }
 async function loadStorage(){
+  await initCloudFromSavedConfig();
   try{ const p = await storage.get('bm160-punches', false); if(p&&p.value) PUNCHES = JSON.parse(p.value); }catch(e){ PUNCHES=[]; }
   try{ const c = await storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
   try{ const e2 = await storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
@@ -1139,6 +1236,23 @@ function applyConfigToForm(){
   document.getElementById('cfgBono').value = CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7;
   document.querySelectorAll('#cfgDias input[type=checkbox]').forEach(cb=>{ cb.checked = CONFIG.dias.includes(+cb.value); });
   applyBrand();
+  applyCloudFormState();
+}
+function applyCloudFormState(){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX+'firebaseConfig');
+    if(raw){
+      const cfg = JSON.parse(raw);
+      document.getElementById('fbApiKey').value = cfg.apiKey || '';
+      document.getElementById('fbAuthDomain').value = cfg.authDomain || '';
+      document.getElementById('fbProjectId').value = cfg.projectId || '';
+      document.getElementById('fbStorageBucket').value = cfg.storageBucket || '';
+      document.getElementById('fbSenderId').value = cfg.messagingSenderId || '';
+      document.getElementById('fbAppId').value = cfg.appId || '';
+      if(CLOUD_ENABLED) setCloudStatus('Conectado — los datos se sincronizan automáticamente entre dispositivos.', true);
+      else setCloudStatus('Se guardó una conexión, pero no se pudo enlazar ahora. Revisa tu internet y da clic en "Conectar y sincronizar".', false);
+    }
+  }catch(e){}
 }
 function applyBrand(){
   document.getElementById('empresaTitulo').textContent = CONFIG.empresaNombre || 'Mi Empresa';
@@ -1375,14 +1489,14 @@ function resizePhoto(file, cb){
   reader.onload = (e)=>{
     const img = new Image();
     img.onload = ()=>{
-      const maxDim = 200;
+      const maxDim = 160;
       let w = img.width, h = img.height;
       if(w>h){ if(w>maxDim){ h = Math.round(h*maxDim/w); w = maxDim; } }
       else { if(h>maxDim){ w = Math.round(w*maxDim/h); h = maxDim; } }
       const canvas = document.createElement('canvas');
       canvas.width=w; canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
-      cb(canvas.toDataURL('image/jpeg', 0.82));
+      cb(canvas.toDataURL('image/jpeg', 0.72));
     };
     img.src = e.target.result;
   };
@@ -1797,6 +1911,32 @@ document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   applyBrand();
   document.getElementById('configMsg').textContent = 'Configuración guardada.';
   toast('Configuración guardada.');
+});
+document.getElementById('btnConnectCloud').addEventListener('click', async ()=>{
+  const cfg = {
+    apiKey: document.getElementById('fbApiKey').value.trim(),
+    authDomain: document.getElementById('fbAuthDomain').value.trim(),
+    projectId: document.getElementById('fbProjectId').value.trim(),
+    storageBucket: document.getElementById('fbStorageBucket').value.trim(),
+    messagingSenderId: document.getElementById('fbSenderId').value.trim(),
+    appId: document.getElementById('fbAppId').value.trim()
+  };
+  if(!cfg.apiKey || !cfg.projectId || !cfg.appId){ toast('Faltan datos de la configuración de Firebase.'); return; }
+  setCloudStatus('Conectando…', false);
+  const ok = await connectFirebase(cfg, true);
+  if(ok){
+    toast('¡Conectado! Recarga la página en tus otros dispositivos para que jalen los mismos datos.');
+    loadStorage();
+  }
+});
+document.getElementById('btnDisconnectCloud').addEventListener('click', ()=>{
+  if(!confirm('¿Dejar de sincronizar con la nube? Este navegador seguirá usando sus propios datos guardados localmente.')) return;
+  CLOUD_ENABLED = false;
+  fbDb = null;
+  localStorage.removeItem(LS_PREFIX+'firebaseConfig');
+  ['fbApiKey','fbAuthDomain','fbProjectId','fbStorageBucket','fbSenderId','fbAppId'].forEach(id=>document.getElementById(id).value='');
+  setCloudStatus('No conectado — los datos solo se guardan en este navegador.', false);
+  toast('Sincronización desconectada.');
 });
 
 /* ---------- cálculo ---------- */
