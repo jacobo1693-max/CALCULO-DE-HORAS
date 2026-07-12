@@ -435,6 +435,27 @@
         <span class="sub" id="processMsg" style="margin:0;"></span>
       </div>
     </div>
+
+    <div class="form-card" style="margin-top:22px;">
+      <h3 style="margin-top:0;">Agregar checada manual</h3>
+      <p class="sub">Úsalo si a alguien se le olvidó marcar entrada o salida ese día.</p>
+      <div class="row">
+        <div class="field">
+          <label>Empleado</label>
+          <select id="manualEmpleado"></select>
+        </div>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="manualFecha">
+        </div>
+        <div class="field">
+          <label>Hora</label>
+          <input type="time" id="manualHora" step="1">
+        </div>
+        <button class="btn" id="btnAddManual">Agregar checada</button>
+      </div>
+      <div id="manualChecadasArea" style="margin-top:14px;"></div>
+    </div>
   </section>
 
   <!-- EMPLOYEES -->
@@ -1417,6 +1438,54 @@ document.getElementById('btnProcess').addEventListener('click', ()=>{
   document.getElementById('processMsg').textContent = `Guardadas ${mergedCount} checadas nuevas (${skipped} filas omitidas por datos incompletos).`;
   toast('Checadas procesadas y guardadas.');
 });
+
+/* ---------- checada manual ---------- */
+function refreshManualEmpleadoSelect(){
+  const sel = document.getElementById('manualEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = allKnownEmployeeIds();
+  sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+function renderManualChecadas(){
+  const id = document.getElementById('manualEmpleado').value;
+  const fecha = document.getElementById('manualFecha').value;
+  const area = document.getElementById('manualChecadasArea');
+  if(!id || !fecha){ area.innerHTML = ''; return; }
+  const dayPunches = PUNCHES.filter(p=>p.id===id && p.fecha===fecha).sort((a,b)=>a.ts-b.ts);
+  if(!dayPunches.length){ area.innerHTML = emptyState('No hay checadas registradas ese día para este empleado.'); return; }
+  let html = `<table><thead><tr><th>Hora</th><th></th></tr></thead><tbody>`;
+  dayPunches.forEach(p=>{
+    html += `<tr><td class="mono">${p.hora.slice(0,5)}</td><td><button class="btn danger small" onclick="deleteManualPunch(${p.ts},'${p.id}')">Eliminar</button></td></tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function deleteManualPunch(ts, id){
+  if(!confirm('¿Eliminar esta checada?')) return;
+  PUNCHES = PUNCHES.filter(p=>!(p.id===id && p.ts===ts));
+  saveStorage();
+  renderManualChecadas();
+  toast('Checada eliminada.');
+}
+document.getElementById('manualEmpleado').addEventListener('change', renderManualChecadas);
+document.getElementById('manualFecha').addEventListener('change', renderManualChecadas);
+document.getElementById('btnAddManual').addEventListener('click', ()=>{
+  const id = document.getElementById('manualEmpleado').value;
+  const fecha = document.getElementById('manualFecha').value;
+  let hora = document.getElementById('manualHora').value;
+  if(!id || !fecha || !hora){ toast('Completa empleado, fecha y hora.'); return; }
+  if(hora.length===5) hora += ':00';
+  const dt = new Date(fecha+'T'+hora);
+  if(isNaN(dt)){ toast('Hora inválida.'); return; }
+  const nombre = employeeDisplayName(id);
+  PUNCHES.push({ id, nombre, fecha, hora, ts: dt.getTime() });
+  PUNCHES.sort((a,b)=>a.ts-b.ts);
+  saveStorage();
+  renderManualChecadas();
+  toast('Checada agregada.');
+});
 document.getElementById('btnClearAll').addEventListener('click', async ()=>{
   if(!confirm('¿Borrar TODOS los datos guardados (checadas, empleados, turnos y códigos)? Esta acción no se puede deshacer.')) return;
   PUNCHES=[]; EMPLOYEES=[]; TURNOS=[]; CODIGOS=[];
@@ -2084,6 +2153,7 @@ function refreshAllEmployeeSelects(){
 
   refreshContratoEmpleadoSelect();
   refreshBajaEmpleadoSelect();
+  refreshManualEmpleadoSelect();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -2483,7 +2553,9 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
     html += `<table><thead><tr><th>Empleado</th><th>No.</th><th>Fecha</th><th>Día</th><th>Tipo</th><th>Detalle</th><th></th></tr></thead><tbody>`;
     rows.forEach(r=>{
       const tagCls = r.tipo==='Falta injustificada' ? 'absent' : 'late';
-      const accion = r.tipo==='Falta injustificada' ? `<button class="btn secondary small" onclick="printActa('${escAttr(r.id)}','${r.fecha}')">Generar acta</button>` : '';
+      const accion = r.tipo==='Falta injustificada'
+        ? `<button class="btn secondary small" onclick="printActa('${escAttr(r.id)}','${r.fecha}')">Generar acta</button>`
+        : `<button class="btn secondary small" onclick="printReporteRetardo('${escAttr(r.id)}','${r.fecha}')">Generar reporte</button>`;
       html += `<tr>
         <td><b>${r.nombre}</b></td>
         <td class="mono">${r.id}</td>
@@ -2496,6 +2568,31 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
     });
     html += `</tbody></table>`;
   }
+
+  const weekGroups = {};
+  rows.filter(r=>r.tipo==='Retardo').forEach(r=>{
+    const wk = mondayWeekRange(r.fecha);
+    const key = r.id+'|'+wk.from;
+    if(!weekGroups[key]) weekGroups[key] = { id:r.id, nombre:r.nombre, from:wk.from, to:wk.to, count:0 };
+    weekGroups[key].count++;
+  });
+  const alertas = Object.values(weekGroups).filter(g=>g.count>=3).sort((a,b)=>b.count-a.count);
+  if(alertas.length){
+    html += `<h3 style="margin-top:26px;">⚠ Empleados con 3 o más retardos en la misma semana</h3>
+      <p class="sub">Se sugiere levantar un acta administrativa por retardos reiterados.</p>
+      <table><thead><tr><th>Empleado</th><th>No.</th><th>Semana</th><th>Retardos</th><th></th></tr></thead><tbody>`;
+    alertas.forEach(g=>{
+      html += `<tr>
+        <td><b>${g.nombre}</b></td>
+        <td class="mono">${g.id}</td>
+        <td class="mono">${g.from} al ${g.to}</td>
+        <td><span class="tag late">${g.count}</span></td>
+        <td><button class="btn secondary small" onclick="printActaRetardos('${escAttr(g.id)}','${g.from}','${g.to}')">Generar acta por retardos</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+
   area.innerHTML = html;
   document.getElementById('btnExportFR').disabled = !rows.length;
   document.getElementById('btnPrintFR').disabled = !rows.length;
@@ -2590,6 +2687,100 @@ function printActa(id, fechaFalta){
   window.print();
 }
 
+function mondayWeekRange(fechaStr){
+  const d = new Date(fechaStr+'T00:00:00');
+  const dow = d.getDay();
+  const diffToMonday = (dow===0) ? -6 : 1-dow;
+  const monday = new Date(d); monday.setDate(d.getDate()+diffToMonday);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
+  return { from: isoDate(monday), to: isoDate(sunday) };
+}
+function actaRetardosHtml(id, from, to){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const nombre = employeeDisplayName(id);
+  const puesto = (emp && emp.puesto) ? emp.puesto : '________________________';
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const domicilioTxt = CONFIG.empresaLugar || '________________________________________________';
+  const lugarTexto = `Oficinas de ${empresaTxt}, ubicadas en ${domicilioTxt}.`;
+  const now = new Date();
+  const days = dateRange(from, to);
+  const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  const detalles = [];
+  days.forEach(fecha=>{
+    const sched = getScheduleFor(id, fecha);
+    if(!sched.activo) return;
+    const info = computeDay(id, fecha);
+    if(info.punches.length===0) return;
+    const lateMins = getLateMinutes(id, info.punches, fecha);
+    if(lateMins>0) detalles.push(`${dayNames[new Date(fecha+'T00:00:00').getDay()]} ${fecha}, llegó ${info.punches[0].hora.slice(0,5)} (${lateMins} min tarde)`);
+  });
+  const listaHtml = detalles.length ? `<ul style="margin:8px 0 0; padding-left:22px;">${detalles.map(d=>`<li>${d}</li>`).join('')}</ul>` : '';
+  return `
+    <div style="max-width:720px; margin:0 auto; font-size:13.5px; line-height:1.75;">
+      <h1 style="text-align:center; font-family:var(--display); font-weight:700; font-size:19px; letter-spacing:.05em; margin-bottom:24px;"><b>ACTA ADMINISTRATIVA</b></h1>
+      <p><b>Fecha</b> y Hora: <b>${fechaLarga(now)}</b>, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
+      <p><b>Lugar:</b> ${lugarTexto}</p>
+      <p><b>Asistentes:</b> Los abajo firmantes.</p>
+
+      <p style="margin-top:20px;"><b>Hechos Constatados:</b></p>
+      <p>Se hace constar que <b>${nombre}</b>, con el puesto de ${puesto}, acumuló <b>3 o más retardos</b> durante la semana comprendida del ${fechaLarga(new Date(from+'T00:00:00'))} al ${fechaLarga(new Date(to+'T00:00:00'))}, conforme al registro de asistencia de la empresa, según el siguiente detalle:</p>
+      ${listaHtml}
+
+      <p style="margin-top:20px;"><b>Determinación:</b></p>
+      <p>Debido a lo anterior, y en cumplimiento con los lineamientos internos de la empresa, se registra un <b>extrañamiento por retardos reiterados</b> en su expediente laboral, exhortando al trabajador a presentarse puntualmente a sus labores en lo sucesivo. De reincidir en esta conducta, la empresa podrá tomar las medidas disciplinarias que considere procedentes conforme a la Ley Federal del Trabajo.</p>
+
+      <p style="margin-top:20px;"><b>Objetivo del Acta:</b></p>
+      <p>La presente acta administrativa se levanta para dejar constancia formal de los hechos y notificar a <b>${nombre}</b> sobre esta incidencia, conforme a los procedimientos establecidos.</p>
+
+      <p style="margin-top:34px;"><b>Firmas de Constatación:</b></p>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR INVOLUCRADO</b><br>${nombre}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>RECURSOS HUMANOS</b></div></div>
+      </div>
+      <div class="sig-row" style="margin-top:52px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TESTIGOS</b></div></div>
+      </div>
+    </div>
+  `;
+}
+function printActaRetardos(id, from, to){
+  document.getElementById('printArea').innerHTML = actaRetardosHtml(id, from, to);
+  window.print();
+}
+function reporteRetardoHtml(id, fecha){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const nombre = employeeDisplayName(id);
+  const puesto = (emp && emp.puesto) ? emp.puesto : '________________________';
+  const empresaTxt = CONFIG.empresaNombre || '________________________________';
+  const domicilioTxt = CONFIG.empresaLugar || '________________________________________________';
+  const now = new Date();
+  const dFecha = new Date(fecha+'T00:00:00');
+  const info = computeDay(id, fecha);
+  const sched = getScheduleFor(id, fecha);
+  const lateMins = getLateMinutes(id, info.punches, fecha);
+  const horaLlegada = info.punches.length ? info.punches[0].hora.slice(0,5) : '—';
+  const horaProgramada = sched.entrada || '—';
+  return `
+    <div style="max-width:720px; margin:0 auto; font-size:13.5px; line-height:1.75;">
+      <h1 style="text-align:center; font-family:var(--display); font-weight:700; font-size:18px; letter-spacing:.04em; margin-bottom:22px;"><b>REPORTE DE RETARDO</b></h1>
+      <p><b>Fecha del reporte:</b> ${fechaLarga(now)}, ${pad(now.getHours())}:${pad(now.getMinutes())} hrs.</p>
+      <p><b>Lugar:</b> Oficinas de ${empresaTxt}, ubicadas en ${domicilioTxt}.</p>
+
+      <p style="margin-top:18px;">Se hace constar que <b>${nombre}</b>, con el puesto de ${puesto}, se presentó con <b>retardo</b> el día <b>${fechaLarga(dFecha)}</b>, registrando su entrada a las <b>${horaLlegada}</b> horas, siendo su hora de entrada programada las <b>${horaProgramada}</b> horas, acumulando <b>${lateMins} minutos</b> de retardo.</p>
+      <p style="margin-top:10px;">Este reporte queda integrado a su expediente para control interno de asistencia.</p>
+
+      <div class="sig-row" style="margin-top:48px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>TRABAJADOR</b><br>${nombre}</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label"><b>RECURSOS HUMANOS</b></div></div>
+      </div>
+    </div>
+  `;
+}
+function printReporteRetardo(id, fecha){
+  document.getElementById('printArea').innerHTML = reporteRetardoHtml(id, fecha);
+  window.print();
+}
 /* ---------- número a letras (para el sueldo diario en los contratos) ---------- */
 const NAL_UNIDADES = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
 const NAL_DIEZ_A_DIECINUEVE = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
