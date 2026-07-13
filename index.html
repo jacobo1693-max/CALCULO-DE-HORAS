@@ -3106,7 +3106,6 @@ function renunciaHtml(emp, fecha, salarioDiario){
   const sueldoLetrasTxt = numeroALetras(salarioDiario);
   return `
     <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
-      ${bajaLetterheadHtml()}
       <p>CUAUHTÉMOC, Chihuahua, a ${fechaTxt}</p>
       <p style="margin-top:16px;"><b>RENUNCIA VOLUNTARIA DEL TRABAJADOR ${nombreEmp}, POR LA PRESTACIÓN DE SERVICIOS PERSONALES SUBORDINADOS CON LA EMPRESA ${empresaTxt}</b></p>
       <p style="margin-top:16px;">PRESENTE.</p>
@@ -3137,7 +3136,6 @@ function finiquitoHtml(emp, fecha, salarioDiario, conceptos){
   const filas = conceptos.map(c=>`<tr><td>${c.nombre}</td><td class="mono" style="text-align:right;">${c.monto!=='' && c.monto!=null ? fmtMoney(+c.monto) : '—'}</td></tr>`).join('');
   return `
     <div class="pagina-oficio" style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5; text-align:justify;">
-      ${bajaLetterheadHtml()}
       <p>CUAUHTÉMOC, Chihuahua, a ${fechaTxt}</p>
       <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15pt; letter-spacing:.1em; margin:16px 0;"><b>F I N I Q U I T O</b></h1>
       <p><b>FINIQUITO DEL TRABAJADOR, ${nombreEmp}</b> POR LA PRESTACIÓN DE SERVICIOS PERSONALES SUBORDINADOS CON LA EMPRESA ${empresaTxt}.</p>
