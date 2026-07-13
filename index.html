@@ -692,11 +692,14 @@
           <div class="field" style="min-width:220px;"><label>Nombre del turno</label><input type="text" id="turNombre2" placeholder="Ej. Turno General"></div>
           <div class="field"><label>Tolerancia (min)</label><input type="number" id="turTolerancia2" value="10" min="0"></div>
         </div>
+        <label class="checkrow" style="margin-top:10px;">
+          <input type="checkbox" id="turFlexible"> Turno flexible (sin hora fija de entrada ni salida; solo define horas objetivo por día, sin retardos ni salida anticipada)
+        </label>
         <h3>Horario por día</h3>
         <p class="sub">Si un día tiene comida partida, llena "Salida a comer" y "Regreso". Si no aplica, déjalos vacíos. Puedes poner un horario distinto en cada día — por ejemplo, que el sábado salga más tarde para completar tus horas de la semana sin que se cuente como hora extra: ese tiempo ya forma parte de su jornada normal de ese día. <b>Turnos nocturnos:</b> si el turno cruza la medianoche (ej. entra 17:00 y sale 01:00 del día siguiente), simplemente pon la hora de salida tal cual ("01:00") — el sistema entiende que es al día siguiente.</p>
         <div style="overflow-x:auto;">
         <table id="turDiasTable">
-          <thead><tr><th>Día</th><th>Laborable</th><th>Entrada</th><th>Salida a comer</th><th>Regreso</th><th>Salida final</th><th>Horas del día</th></tr></thead>
+          <thead id="turDiasHead"><tr><th>Día</th><th>Laborable</th><th>Entrada</th><th>Salida a comer</th><th>Regreso</th><th>Salida final</th><th>Horas del día</th></tr></thead>
           <tbody id="turDiasBody"></tbody>
         </table>
         </div>
@@ -1754,7 +1757,22 @@ function timeToMins(t){
   return h*60+m;
 }
 function buildTurDiasRows(schedule){
+  const flexible = document.getElementById('turFlexible').checked;
+  const head = document.getElementById('turDiasHead');
   const body = document.getElementById('turDiasBody');
+  if(flexible){
+    head.innerHTML = `<tr><th>Día</th><th>Laborable</th><th>Horas objetivo</th></tr>`;
+    body.innerHTML = DOW_ORDER.map(dow=>{
+      const d = (schedule && schedule[dow]) || { activo: dow>=1&&dow<=5, horasObjetivo: 8 };
+      return `<tr data-dow="${dow}">
+        <td><b>${DOW_LABELS[dow]}</b></td>
+        <td><input type="checkbox" id="tur_d${dow}_activo" ${d.activo?'checked':''}></td>
+        <td><input type="number" min="0" step="0.5" id="tur_d${dow}_horasObjetivo" value="${d.horasObjetivo!=null ? d.horasObjetivo : 8}" style="width:100px;"></td>
+      </tr>`;
+    }).join('');
+    return;
+  }
+  head.innerHTML = `<tr><th>Día</th><th>Laborable</th><th>Entrada</th><th>Salida a comer</th><th>Regreso</th><th>Salida final</th><th>Horas del día</th></tr>`;
   body.innerHTML = DOW_ORDER.map(dow=>{
     const d = (schedule && schedule[dow]) || { activo: dow>=1&&dow<=5, entrada:'08:00', salida1:'17:00', entrada2:'', salida2:'' };
     return `<tr data-dow="${dow}">
@@ -1776,9 +1794,11 @@ function buildTurDiasRows(schedule){
     updateTurDiaHoras(dow);
   });
 }
+document.getElementById('turFlexible').addEventListener('change', ()=>buildTurDiasRows(null));
 function updateTurDiaHoras(dow){
   const activo = document.getElementById(`tur_d${dow}_activo`).checked;
   const cell = document.getElementById(`tur_d${dow}_horas`);
+  if(!cell) return;
   if(!activo){ cell.textContent='—'; return; }
   const entrada = document.getElementById(`tur_d${dow}_entrada`).value;
   const salida1 = document.getElementById(`tur_d${dow}_salida1`).value;
@@ -1788,8 +1808,16 @@ function updateTurDiaHoras(dow){
   cell.textContent = mins>0 ? fmtHM(mins) : '—';
 }
 function collectTurDias(){
+  const flexible = document.getElementById('turFlexible').checked;
   const dias = {};
   DOW_ORDER.forEach(dow=>{
+    if(flexible){
+      dias[dow] = {
+        activo: document.getElementById(`tur_d${dow}_activo`).checked,
+        horasObjetivo: +document.getElementById(`tur_d${dow}_horasObjetivo`).value || 0
+      };
+      return;
+    }
     dias[dow] = {
       activo: document.getElementById(`tur_d${dow}_activo`).checked,
       entrada: document.getElementById(`tur_d${dow}_entrada`).value,
@@ -1804,6 +1832,7 @@ function resetTurnoForm(){
   document.getElementById('turEditingKey').value='';
   document.getElementById('turNombre2').value='';
   document.getElementById('turTolerancia2').value=10;
+  document.getElementById('turFlexible').checked=false;
   buildTurDiasRows(null);
   document.getElementById('btnSaveTurno2').textContent='Agregar turno';
   document.getElementById('btnCancelEditTurno').style.display='none';
@@ -1812,9 +1841,10 @@ document.getElementById('btnSaveTurno2').addEventListener('click', ()=>{
   const nombre = document.getElementById('turNombre2').value.trim();
   if(!nombre){ toast('Ponle un nombre al turno.'); return; }
   const tolerancia = +document.getElementById('turTolerancia2').value || 0;
+  const flexible = document.getElementById('turFlexible').checked;
   const dias = collectTurDias();
   const editingKey = document.getElementById('turEditingKey').value;
-  const data = { id: editingKey || uid(), nombre, tolerancia, dias };
+  const data = { id: editingKey || uid(), nombre, tolerancia, flexible, dias };
   if(editingKey){
     const idx = TURNOS.findIndex(t=>t.id===editingKey);
     if(idx>-1) TURNOS[idx] = data;
@@ -1830,6 +1860,7 @@ function editTurno(id){
   document.getElementById('turEditingKey').value = id;
   document.getElementById('turNombre2').value = t.nombre;
   document.getElementById('turTolerancia2').value = t.tolerancia||10;
+  document.getElementById('turFlexible').checked = !!t.flexible;
   buildTurDiasRows(t.dias);
   document.getElementById('btnSaveTurno2').textContent = 'Guardar cambios';
   document.getElementById('btnCancelEditTurno').style.display='inline-block';
@@ -1850,11 +1881,14 @@ function renderTurnosTable(){
   TURNOS.forEach(t=>{
     const resumen = DOW_ORDER.filter(dow=>t.dias && t.dias[dow] && t.dias[dow].activo).map(dow=>{
       const d = t.dias[dow];
+      if(t.flexible){
+        return `<b>${DOW_LABELS[dow].slice(0,3)}</b> ${d.horasObjetivo||0}h flexibles`;
+      }
       let horario = `${d.entrada||'?'}–${d.salida1||'?'}`;
       if(d.entrada2 && d.salida2) horario += ` / ${d.entrada2}–${d.salida2}`;
       return `<b>${DOW_LABELS[dow].slice(0,3)}</b> ${horario}`;
     }).join('<br>');
-    html += `<tr><td><b>${t.nombre}</b></td><td style="font-size:12px; line-height:1.6;">${resumen||'—'}</td><td class="mono">${t.tolerancia||0} min</td>
+    html += `<tr><td><b>${t.nombre}</b>${t.flexible ? ' <span class="tag neutral">Flexible</span>' : ''}</td><td style="font-size:12px; line-height:1.6;">${resumen||'—'}</td><td class="mono">${t.tolerancia||0} min</td>
     <td><button class="btn secondary small" onclick="editTurno('${t.id}')">Editar</button> <button class="btn danger small" onclick="deleteTurno('${t.id}')">Eliminar</button></td></tr>`;
   });
   html += `</tbody></table>`;
@@ -2085,15 +2119,19 @@ function getScheduleFor(id, fecha){
     const t = TURNOS.find(x=>x.id===emp.turnoId);
     if(t && t.dias && t.dias[dow]){
       const d = t.dias[dow];
-      if(!d.activo) return { activo:false, entrada:null, salidaFinal:null, tolerancia:t.tolerancia||0, expectedMins:0, overnight:false };
+      if(!d.activo) return { activo:false, entrada:null, salidaFinal:null, tolerancia:t.tolerancia||0, expectedMins:0, overnight:false, flexible:!!t.flexible };
+      if(t.flexible){
+        const expectedMins = (+d.horasObjetivo||0)*60;
+        return { activo:true, entrada:null, salidaFinal:null, tolerancia:t.tolerancia||0, expectedMins, overnight:false, flexible:true };
+      }
       const expectedMins = minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
       const finalSalida = d.salida2 || d.salida1;
       const overnight = !!(d.entrada && finalSalida && timeToMins(finalSalida) <= timeToMins(d.entrada));
-      return { activo:true, entrada:d.entrada||null, salidaFinal:finalSalida||null, tolerancia:t.tolerancia||0, expectedMins, overnight };
+      return { activo:true, entrada:d.entrada||null, salidaFinal:finalSalida||null, tolerancia:t.tolerancia||0, expectedMins, overnight, flexible:false };
     }
   }
   const activo = CONFIG.dias.includes(dow);
-  return { activo, entrada: CONFIG.entrada, salidaFinal:null, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0, overnight:false };
+  return { activo, entrada: CONFIG.entrada, salidaFinal:null, tolerancia: CONFIG.tolerancia, expectedMins: activo ? (CONFIG.jornada||8)*60 : 0, overnight:false, flexible:false };
 }
 function isLate(id, dayPunches, fecha){
   if(!dayPunches.length) return false;
@@ -2919,6 +2957,12 @@ function horarioTextoDesdeTurno(turnoId){
   if(!turnoId) return '________________________________ (asigna un turno al empleado para completar este dato)';
   const t = TURNOS.find(x=>x.id===turnoId);
   if(!t) return '________________________________';
+  if(t.flexible){
+    const activos = DOW_ORDER.filter(dow=>t.dias && t.dias[dow] && t.dias[dow].activo);
+    const totalHoras = activos.reduce((s,dow)=>s+(+t.dias[dow].horasObjetivo||0),0);
+    const diasTxt = activos.map(dow=>DOW_LABELS[dow]).join(', ');
+    return activos.length ? `horario flexible, sin hora fija de entrada ni salida, cumpliendo un total de ${totalHoras} horas a la semana, laborando ${diasTxt}` : '________________________________';
+  }
   const partes = DOW_ORDER.filter(dow=>t.dias && t.dias[dow] && t.dias[dow].activo).map(dow=>{
     const d = t.dias[dow];
     let h = `${d.entrada||'?'} a ${d.salida1||'?'}`;
@@ -2935,8 +2979,10 @@ function turnoResumenSemana(turnoId){
   const inactivos = [];
   DOW_ORDER.forEach(dow=>{
     const d = t.dias && t.dias[dow];
-    if(d && d.activo) totalMins += minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
-    else inactivos.push(DOW_LABELS[dow].toUpperCase());
+    if(d && d.activo){
+      if(t.flexible) totalMins += (+d.horasObjetivo||0)*60;
+      else totalMins += minsBetween(d.entrada, d.salida1) + minsBetween(d.entrada2, d.salida2);
+    } else inactivos.push(DOW_LABELS[dow].toUpperCase());
   });
   return { horasSemana: Math.round(totalMins/60), descansoTxt: inactivos.length ? inactivos.join(' Y ') : '________________________' };
 }
