@@ -123,6 +123,12 @@
   #dashTrend circle{ cursor:pointer; transition:.12s; }
   #dashTrend circle:hover{ r:5.5; fill:#4fe3b0; }
   .dash-chip{ display:inline-flex; align-items:center; gap:8px; background:#16243a; border:1px solid #2a4d78; color:#cfe0f5; font-size:12.5px; padding:6px 12px; border-radius:20px; margin-bottom:14px; }
+  .alert-card{ border-radius:12px; padding:14px 18px; margin-bottom:12px; border:1px solid; }
+  .alert-card.warn{ background:rgba(245,165,36,.1); border-color:#a86a12; }
+  .alert-card.danger{ background:rgba(247,109,109,.1); border-color:#a83a3a; }
+  .alert-card h4{ margin:0 0 8px; font-family:var(--display); font-size:13.5px; color:#f3f6fb; }
+  .alert-card table{ margin-top:2px; }
+  .alert-card .btn{ padding:6px 12px; font-size:12px; }
   .dash-chip b{ color:#4fe3b0; }
   .dash-chip button{ background:none; border:none; color:#8ea0b8; cursor:pointer; font-size:13px; padding:0; line-height:1; }
   .dash-chip button:hover{ color:#f88a8a; }
@@ -329,6 +335,7 @@
     </div>
 
     <div id="dashFilterChip" style="display:none;"></div>
+    <div id="dashAlertas"></div>
 
     <div id="dashKpis" class="stat-grid" style="margin-top:6px;"></div>
 
@@ -665,7 +672,11 @@
       <div class="hint" id="bajaTotal" style="margin:0;">Total: $0.00</div>
     </div>
 
-    <div class="row" style="margin-top:20px;">
+    <label class="checkrow" style="margin-top:14px;">
+      <input type="checkbox" id="bajaMarcarInactivo" checked> Dar de baja a este empleado automáticamente al guardar (dejará de aparecer en Contratos y en el Dashboard, pero conserva todo su historial)
+    </label>
+
+    <div class="row" style="margin-top:16px;">
       <button class="btn" id="btnGuardarBaja">Guardar datos</button>
       <button class="btn secondary" id="btnImprimirRenuncia" disabled>Imprimir renuncia</button>
       <button class="btn secondary" id="btnImprimirFiniquito" disabled>Imprimir finiquito</button>
@@ -1718,11 +1729,12 @@ function renderEmployeesTable(){
   const area = document.getElementById('employeesTableArea');
   if(!EMPLOYEES.length){ area.innerHTML = emptyState('Aún no hay empleados registrados en el directorio.'); return; }
   const sorted = [...EMPLOYEES].sort((a,b)=>compareIdsNumeric(a.id,b.id));
-  let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Puesto</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th></th></tr></thead><tbody>`;
+  let html = `<table><thead><tr><th>Foto</th><th>Nombre</th><th>No. empleado</th><th>Departamento</th><th>Puesto</th><th>Contratación</th><th>Sueldo/hora</th><th>Turno</th><th>Código</th><th>Estado</th><th></th></tr></thead><tbody>`;
   sorted.forEach(e=>{
     const turno = TURNOS.find(t=>t.id===e.turnoId);
     const codigo = CODIGOS.find(c=>c.id===e.codigoId);
-    html += `<tr>
+    const activo = e.activo !== false;
+    html += `<tr style="${activo?'':'opacity:.55;'}">
       <td>${e.foto ? `<img class="avatar" src="${e.foto}">` : `<div class="avatar avatar-placeholder" style="font-size:11px;">${e.nombre.slice(0,2).toUpperCase()}</div>`}</td>
       <td><b>${e.nombre}</b></td>
       <td class="mono">${e.id}</td>
@@ -1732,11 +1744,25 @@ function renderEmployeesTable(){
       <td class="mono">${e.sueldoHora ? '$'+Number(e.sueldoHora).toFixed(2) : '—'}</td>
       <td>${turno ? turno.nombre : '—'}</td>
       <td>${codigo ? codigo.clave : '—'}</td>
-      <td><button class="btn secondary small" onclick="editEmployee('${e.id}')">Editar</button> <button class="btn danger small" onclick="deleteEmployee('${e.id}')">Eliminar</button></td>
+      <td>${activo ? '<span class="tag ok">Activo</span>' : '<span class="tag absent">Dado de baja</span>'}</td>
+      <td><button class="btn secondary small" onclick="editEmployee('${e.id}')">Editar</button>
+      <button class="btn secondary small" onclick="toggleEmployeeActivo('${e.id}')">${activo ? 'Dar de baja' : 'Reactivar'}</button>
+      <button class="btn danger small" onclick="deleteEmployee('${e.id}')">Eliminar</button></td>
     </tr>`;
   });
   html += `</tbody></table>`;
   area.innerHTML = html;
+}
+function toggleEmployeeActivo(id){
+  const idx = EMPLOYEES.findIndex(e=>e.id===id);
+  if(idx===-1) return;
+  const activo = EMPLOYEES[idx].activo !== false;
+  if(activo && !confirm('¿Dar de baja a este empleado? Ya no aparecerá en el selector de Contratos ni se contará en el Dashboard, pero su historial de checadas, reportes y documentos se conserva.')) return;
+  EMPLOYEES[idx].activo = !activo;
+  saveStorage();
+  renderEmployeesTable();
+  refreshAllEmployeeSelects();
+  toast(EMPLOYEES[idx].activo ? 'Empleado reactivado.' : 'Empleado dado de baja.');
 }
 
 /* ---------- turnos (horario por día) ---------- */
@@ -2161,6 +2187,12 @@ function allKnownEmployeeIds(){
   EMPLOYEES.forEach(e=>set.add(e.id));
   PUNCHES.forEach(p=>set.add(p.id));
   return sortIdsNumeric(Array.from(set));
+}
+function activeEmployeeIds(){
+  return allKnownEmployeeIds().filter(id=>{
+    const emp = EMPLOYEES.find(e=>e.id===id);
+    return !emp || emp.activo !== false; // si no está en el directorio (solo checadas), se sigue mostrando
+  });
 }
 function refreshAllEmployeeSelects(){
   const ids = allKnownEmployeeIds();
@@ -3223,11 +3255,18 @@ document.getElementById('btnGuardarBaja').addEventListener('click', ()=>{
   const idx = EMPLOYEES.findIndex(e=>e.id===id);
   if(idx===-1){ toast('Ese empleado no está en el directorio.'); return; }
   EMPLOYEES[idx].separacion = { fecha, salarioDiario, conceptos: BAJA_CONCEPTOS.map(c=>({...c})) };
+  let bajaMsgExtra = '';
+  if(document.getElementById('bajaMarcarInactivo').checked){
+    EMPLOYEES[idx].activo = false;
+    bajaMsgExtra = ' El empleado quedó dado de baja.';
+  }
   saveStorage();
+  renderEmployeesTable();
+  refreshAllEmployeeSelects();
   document.getElementById('btnImprimirRenuncia').disabled = false;
   document.getElementById('btnImprimirFiniquito').disabled = false;
-  document.getElementById('bajaMsg').textContent = 'Datos guardados en la ficha del empleado.';
-  toast('Datos de baja guardados.');
+  document.getElementById('bajaMsg').textContent = 'Datos guardados en la ficha del empleado.' + bajaMsgExtra;
+  toast('Datos de baja guardados.' + bajaMsgExtra);
 });
 document.getElementById('btnImprimirRenuncia').addEventListener('click', ()=>{
   const id = document.getElementById('bajaEmpleado').value;
@@ -3247,7 +3286,7 @@ function refreshContratoEmpleadoSelect(){
   const sel = document.getElementById('ctrEmpleado');
   if(!sel) return;
   const cur = sel.value;
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
 }
@@ -3403,9 +3442,15 @@ function goToEmployeeReport(id, from, to){
   document.querySelector('nav.tabs button[data-tab="report"]').click();
   generateEmployeeReport(id, from, to);
 }
+function goToContratos(id){
+  document.querySelector('nav.tabs button[data-tab="contratos"]').click();
+  const sel = document.getElementById('ctrEmpleado');
+  sel.value = id;
+  sel.dispatchEvent(new Event('change'));
+}
 
 function computeDashboardData(from, to){
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   let perEmployee = ids.map(id=>{
     const r = computeEmployeePeriod(id, from, to);
     const emp = EMPLOYEES.find(e=>e.id===id);
@@ -3536,6 +3581,7 @@ function trendChartSvg(weeks, values){
   </svg>`;
 }
 function renderDashboardIndividual(id, from, to){
+  document.getElementById('dashAlertas').innerHTML = '';
   const chipArea = document.getElementById('dashFilterChip');
   chipArea.style.display = 'none';
   chipArea.innerHTML = '';
@@ -3601,6 +3647,41 @@ function renderDashboard(){
     chipArea.style.display = 'none';
     chipArea.innerHTML = '';
   }
+
+  const hoyTs = new Date(isoDate(new Date())+'T00:00:00').getTime();
+  const contratosVencidos = activeEmployeeIds().map(id=>EMPLOYEES.find(e=>e.id===id)).filter(emp=>{
+    if(!emp || !emp.contrato || emp.contrato.tipo!=='prueba30') return false;
+    const fc = emp.contrato.fechaCelebracion || emp.fecha;
+    if(!fc) return false;
+    const venceTs = new Date(fc+'T00:00:00').getTime() + 30*86400000;
+    return hoyTs > venceTs;
+  });
+  const conIncidencias = data.perEmployee.filter(e=>(e.retardos+e.faltas)>0).sort((a,b)=>(b.retardos+b.faltas)-(a.retardos+a.faltas));
+
+  let alertasHtml = '';
+  if(contratosVencidos.length){
+    alertasHtml += `<div class="alert-card danger">
+      <h4>⏰ ${contratosVencidos.length} contrato(s) de prueba vencidos (30 días cumplidos)</h4>
+      <table><thead><tr><th>Empleado</th><th>No.</th><th>Fecha de celebración</th><th></th></tr></thead><tbody>
+        ${contratosVencidos.map(emp=>`<tr>
+          <td>${emp.nombre}</td>
+          <td class="mono">${emp.id}</td>
+          <td class="mono">${emp.contrato.fechaCelebracion || emp.fecha || '—'}</td>
+          <td><button class="btn secondary small" onclick="goToContratos('${escAttr(emp.id)}')">Ir a Contratos</button></td>
+        </tr>`).join('')}
+      </tbody></table>
+    </div>`;
+  }
+  if(conIncidencias.length){
+    alertasHtml += `<div class="alert-card warn">
+      <h4>⚠ ${conIncidencias.length} empleado(s) con retardos o faltas en este periodo</h4>
+      <table><thead><tr><th>Empleado</th><th>Retardos</th><th>Faltas</th></tr></thead><tbody>
+        ${conIncidencias.slice(0,8).map(e=>`<tr><td>${e.nombre}</td><td class="mono">${e.retardos}</td><td class="mono">${e.faltas}</td></tr>`).join('')}
+      </tbody></table>
+      ${conIncidencias.length>8 ? `<p class="sub" style="margin:8px 0 0; color:#9fb1c7;">y ${conIncidencias.length-8} más — revisa "Faltas y retardos" para el detalle completo.</p>` : ''}
+    </div>`;
+  }
+  document.getElementById('dashAlertas').innerHTML = alertasHtml;
 
   document.getElementById('dashKpis').innerHTML = `
     <div class="stat"><div class="n">${data.totalEmpleados}</div><div class="l">Empleados</div></div>
