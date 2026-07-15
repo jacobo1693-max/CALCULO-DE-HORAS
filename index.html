@@ -567,6 +567,10 @@
           <label>RFC</label>
           <input type="text" id="empRfc" placeholder="Ej. MEAJ901204TK1">
         </div>
+        <div class="field">
+          <label>Teléfono (WhatsApp)</label>
+          <input type="text" id="empTelefono" placeholder="Ej. 6251234567">
+        </div>
       </div>
       <div class="row" style="margin-top:14px;">
         <div class="field" style="min-width:100%;">
@@ -1627,6 +1631,7 @@ function resetEmployeeForm(){
   document.getElementById('empDomicilio').value='';
   document.getElementById('empCurp').value='';
   document.getElementById('empRfc').value='';
+  document.getElementById('empTelefono').value='';
   document.getElementById('empFunciones').value='';
   document.getElementById('empBeneficiario').value='';
   document.getElementById('empParentesco').value='';
@@ -1657,6 +1662,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     domicilio: document.getElementById('empDomicilio').value.trim(),
     curp: document.getElementById('empCurp').value.trim(),
     rfc: document.getElementById('empRfc').value.trim(),
+    telefono: document.getElementById('empTelefono').value.trim(),
     funciones: document.getElementById('empFunciones').value.trim(),
     beneficiario: document.getElementById('empBeneficiario').value.trim(),
     parentesco: document.getElementById('empParentesco').value.trim(),
@@ -1709,6 +1715,7 @@ function editEmployee(id){
   document.getElementById('empDomicilio').value = emp.domicilio || '';
   document.getElementById('empCurp').value = emp.curp || '';
   document.getElementById('empRfc').value = emp.rfc || '';
+  document.getElementById('empTelefono').value = emp.telefono || '';
   document.getElementById('empFunciones').value = emp.funciones || '';
   document.getElementById('empBeneficiario').value = emp.beneficiario || '';
   document.getElementById('empParentesco').value = emp.parentesco || '';
@@ -2646,7 +2653,7 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
       const tagCls = r.tipo==='Falta injustificada' ? 'absent' : 'late';
       const accion = r.tipo==='Falta injustificada'
         ? `<button class="btn secondary small" onclick="printActa('${escAttr(r.id)}','${r.fecha}')">Generar acta</button>`
-        : `<button class="btn secondary small" onclick="printReporteRetardo('${escAttr(r.id)}','${r.fecha}')">Generar reporte</button>`;
+        : `<button class="btn secondary small" onclick="printReporteRetardo('${escAttr(r.id)}','${r.fecha}')">Generar reporte</button> <button class="btn secondary small" onclick="enviarWhatsAppRetardo('${escAttr(r.id)}','${r.fecha}')">WhatsApp</button>`;
       html += `<tr>
         <td><b>${r.nombre}</b></td>
         <td class="mono">${r.id}</td>
@@ -2863,6 +2870,28 @@ function actaRetardosHtml(id, from, to){
 function printActaRetardos(id, from, to){
   document.getElementById('printArea').innerHTML = actaRetardosHtml(id, from, to);
   window.print();
+}
+function whatsappNumeroLimpio(telefono){
+  if(!telefono) return null;
+  let digits = String(telefono).replace(/\D/g,'');
+  if(!digits) return null;
+  if(digits.length===10) digits = '52' + digits; // asume México si no trae código de país
+  return digits;
+}
+function enviarWhatsAppRetardo(id, fecha){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const numero = whatsappNumeroLimpio(emp && emp.telefono);
+  if(!numero){ toast('Este empleado no tiene teléfono capturado. Agrégalo en su ficha en "Empleados".'); return; }
+  const nombre = employeeDisplayName(id);
+  const info = computeDay(id, fecha);
+  const sched = getScheduleFor(id, fecha);
+  const lateMins = getLateMinutes(id, info.punches, fecha);
+  const horaLlegada = info.punches.length ? info.punches[0].hora.slice(0,5) : '—';
+  const dFecha = new Date(fecha+'T00:00:00');
+  const dayNames = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const empresaTxt = CONFIG.empresaNombre || 'la empresa';
+  const mensaje = `Hola ${nombre}, te informamos que el ${dayNames[dFecha.getDay()]} ${fecha} registraste un retardo: llegaste a las ${horaLlegada} (tu hora de entrada es a las ${sched.entrada||'—'}), acumulando ${lateMins} minutos tarde. Por favor sé puntual en tus próximas jornadas. — Recursos Humanos, ${empresaTxt}`;
+  window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
 }
 function reporteRetardoHtml(id, fecha){
   const emp = EMPLOYEES.find(e=>e.id===id);
