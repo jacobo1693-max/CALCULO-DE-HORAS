@@ -2198,7 +2198,7 @@ function allKnownEmployeeIds(){
 function activeEmployeeIds(){
   return allKnownEmployeeIds().filter(id=>{
     const emp = EMPLOYEES.find(e=>e.id===id);
-    return !emp || emp.activo !== false; // si no está en el directorio (solo checadas), se sigue mostrando
+    return emp && emp.activo !== false; // debe tener ficha en Empleados Y estar activo
   });
 }
 function refreshAllEmployeeSelects(){
@@ -3685,7 +3685,6 @@ function renderDashboard(){
     const venceTs = new Date(fc+'T00:00:00').getTime() + 30*86400000;
     return hoyTs > venceTs;
   });
-  const conIncidencias = data.perEmployee.filter(e=>(e.retardos+e.faltas)>0).sort((a,b)=>(b.retardos+b.faltas)-(a.retardos+a.faltas));
 
   let alertasHtml = '';
   if(contratosVencidos.length){
@@ -3699,15 +3698,6 @@ function renderDashboard(){
           <td><button class="btn secondary small" onclick="goToContratos('${escAttr(emp.id)}')">Ir a Contratos</button></td>
         </tr>`).join('')}
       </tbody></table>
-    </div>`;
-  }
-  if(conIncidencias.length){
-    alertasHtml += `<div class="alert-card warn">
-      <h4>⚠ ${conIncidencias.length} empleado(s) con retardos o faltas en este periodo</h4>
-      <table><thead><tr><th>Empleado</th><th>Retardos</th><th>Faltas</th></tr></thead><tbody>
-        ${conIncidencias.slice(0,8).map(e=>`<tr><td>${e.nombre}</td><td class="mono">${e.retardos}</td><td class="mono">${e.faltas}</td></tr>`).join('')}
-      </tbody></table>
-      ${conIncidencias.length>8 ? `<p class="sub" style="margin:8px 0 0; color:#9fb1c7;">y ${conIncidencias.length-8} más — revisa "Faltas y retardos" para el detalle completo.</p>` : ''}
     </div>`;
   }
   document.getElementById('dashAlertas').innerHTML = alertasHtml;
