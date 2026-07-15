@@ -2275,7 +2275,7 @@ document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
   if(!from || !to){ toast('Elige el rango de fechas.'); return; }
   if(from>to){ toast('La fecha "desde" debe ser anterior a "hasta".'); return; }
 
-  const ids = empSel==='__all__' ? allKnownEmployeeIds() : [empSel];
+  const ids = empSel==='__all__' ? activeEmployeeIds() : [empSel];
   if(!ids.length || !ids[0]){ area.innerHTML = emptyState('No hay empleados para mostrar todavía.'); return; }
 
   let grandTotalPago = 0, anySueldo = false;
@@ -2459,8 +2459,8 @@ function generateEmployeeReport(id, from, to){
   document.getElementById('btnPrintReport').disabled = false;
 }
 function generateAllEmployeesReport(from, to){
-  const ids = allKnownEmployeeIds();
-  if(!ids.length){ toast('No hay empleados registrados todavía.'); return; }
+  const ids = activeEmployeeIds();
+  if(!ids.length){ toast('No hay empleados activos registrados todavía.'); return; }
   const all = ids.map(id=>computeReportData(id, from, to));
   window._lastReportAll = all;
   window._lastReport = null;
@@ -2573,7 +2573,7 @@ document.getElementById('frNinguno').addEventListener('click', ()=>{
 });
 function getSelectedIdsFR(){
   const modo = document.getElementById('frModo').value;
-  if(modo==='all') return allKnownEmployeeIds();
+  if(modo==='all') return activeEmployeeIds();
   if(modo==='one'){ const v = document.getElementById('frUnoEmpleado').value; return v ? [v] : []; }
   return Array.from(document.querySelectorAll('#frCheckList input:checked')).map(i=>i.value);
 }
