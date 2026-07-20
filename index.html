@@ -105,6 +105,8 @@
   #panel-dashboard tr:hover td{ background:#16243a; }
   #panel-dashboard tr.clickable{ cursor:pointer; }
   #panel-dashboard tr.clickable:hover td{ background:#1a2e46; }
+  tr.clickable{ cursor:pointer; }
+  tr.clickable:hover td{ background:#f4f7fa; }
   #panel-dashboard .bar-track{ background:#1c2c40; }
   #panel-dashboard .bar-fill{ background:linear-gradient(90deg,#215079,#4fa8e8); }
   #panel-dashboard .bar-fill.amber{ background:linear-gradient(90deg,#a86a12,#f5a524); }
@@ -2157,7 +2159,36 @@ function computeDay(id, fecha){
     }
     totalMins = segments.reduce((s,x)=>s+x.mins,0);
   }
-  return { punches: dayPunches, segments, totalMins, incomplete };
+
+  // Si llegó antes de su hora de entrada programada, esos minutos NO se cuentan por default
+  // (a menos que se autoricen explícitamente) — así no se le "regalan" horas por llegar temprano.
+  let recorteTempranoMins = 0;
+  if(segments.length && dayPunches.length && sched.activo && sched.entrada && !sched.flexible){
+    const entradaProgTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
+    const entradaRealTs = dayPunches[0].ts;
+    if(entradaRealTs < entradaProgTs && !isEarlyArrivalAuthorized(id, fecha)){
+      const diffMins = Math.round((entradaProgTs - entradaRealTs)/60000);
+      const primerSeg = segments[0];
+      const recorte = Math.min(diffMins, primerSeg.mins);
+      primerSeg.mins -= recorte;
+      totalMins -= recorte;
+      recorteTempranoMins = recorte;
+    }
+  }
+  return { punches: dayPunches, segments, totalMins, incomplete, recorteTempranoMins };
+}
+function isEarlyArrivalAuthorized(id, fecha){
+  return AUTORIZACIONES[`${id}|${fecha}|temprano`] === true; // por default NO autorizada
+}
+async function toggleEarlyAuthorization(id, fecha){
+  const key = `${id}|${fecha}|temprano`;
+  const was = isEarlyArrivalAuthorized(id, fecha);
+  AUTORIZACIONES[key] = !was;
+  await saveStorage();
+  toast(!was ? 'Llegada temprano autorizada — ya se cuenta esa hora.' : 'Llegada temprano ya no autorizada — ya no se cuenta esa hora.');
+  if(window._lastReportParams){
+    generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
+  }
 }
 function getSueldoHora(id){
   const emp = EMPLOYEES.find(e=>e.id===id);
@@ -2480,9 +2511,13 @@ function reportTableHtml(rep){
     const abandonoBtn = abandonoMins>0
       ? `<br><span class="tag late" title="Salió antes de su hora de salida programada">Salida anticipada · ${abandonoMins} min</span><br><button class="btn secondary small" style="margin-top:5px;" onclick="printActaAbandono('${rep.id}','${r.fecha}')">Generar acta por abandono</button>`
       : '';
+    const tempranoAutorizado = isEarlyArrivalAuthorized(rep.id, r.fecha);
+    const tempranoBtn = (r.info.recorteTempranoMins>0 || tempranoAutorizado)
+      ? `<br><span class="tag ${tempranoAutorizado?'ok':'late'}" title="Llegó antes de su hora de entrada">${tempranoAutorizado ? 'Llegada temprano autorizada' : `No se contó llegada temprano (${r.info.recorteTempranoMins} min)`}</span><br><button class="btn secondary small" style="margin-top:5px;" onclick="toggleEarlyAuthorization('${rep.id}','${r.fecha}')">${tempranoAutorizado?'Quitar autorización':'Autorizar llegada temprano'}</button>`
+      : '';
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
-      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}</td>
+      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}${tempranoBtn}</td>
       <td class="mono">${pares}</td>
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
@@ -2517,13 +2552,14 @@ function generateAllEmployeesReport(from, to){
   window._lastReportParams = null;
 
   let grand = 0, anySueldo = false;
-  let html = `<div class="hint">Mostrando el resumen de ${all.length} empleados. Al imprimir, cada empleado sale en su propia hoja, con espacio para firma.</div>
-    <table><thead><tr><th>Empleado</th><th>No.</th><th>Horas totales</th><th>Horas extra</th><th>Retardos</th><th>Faltas</th><th>Bono</th><th>Pago total</th></tr></thead><tbody>`;
-  all.forEach(d=>{
+  let html = `<div class="hint">Mostrando el resumen de ${all.length} empleados. Da clic en cualquier fila para ver sus horas día por día. Al imprimir, cada empleado sale en su propia hoja, con espacio para firma.</div>
+    <table><thead><tr><th style="width:26px;"></th><th>Empleado</th><th>No.</th><th>Horas totales</th><th>Horas extra</th><th>Retardos</th><th>Faltas</th><th>Bono</th><th>Pago total</th></tr></thead><tbody>`;
+  all.forEach((d,idx)=>{
     if(d.sueldoHora) anySueldo = true;
     grand += d.totalPago;
     const bonoCell = d.puntual ? (d.sueldoHora ? fmtMoney(d.bono) : 'Puntual') : '—';
-    html += `<tr>
+    html += `<tr class="clickable" onclick="toggleDailyBreakdown(${idx})">
+      <td><span id="drIcon${idx}">▸</span></td>
       <td><b>${d.nombre}</b></td><td class="mono">${d.id}</td>
       <td class="mono">${fmtHM(d.totalMins)}</td>
       <td class="mono">${d.totalExtraMins ? fmtHM(d.totalExtraMins) : '—'}</td>
@@ -2531,12 +2567,20 @@ function generateAllEmployeesReport(from, to){
       <td>${d.faltas ? `<span class="tag absent">${d.faltas}</span>` : '<span class="tag ok">0</span>'}</td>
       <td class="mono">${bonoCell}</td>
       <td class="mono"><b>${d.sueldoHora ? fmtMoney(d.totalPago) : '—'}</b></td>
-    </tr>`;
+    </tr>
+    <tr id="drRow${idx}" style="display:none;"><td colspan="9" style="background:#f7f9fb; padding:14px;">${reportTableHtml(d)}</td></tr>`;
   });
-  html += `</tbody><tfoot><tr><td colspan="7" style="text-align:right; font-weight:700;">Total general</td><td class="mono"><b>${anySueldo ? fmtMoney(grand) : '—'}</b></td></tr></tfoot></table>`;
+  html += `</tbody><tfoot><tr><td colspan="8" style="text-align:right; font-weight:700;">Total general</td><td class="mono"><b>${anySueldo ? fmtMoney(grand) : '—'}</b></td></tr></tfoot></table>`;
   document.getElementById('reportArea').innerHTML = html;
   document.getElementById('btnExportReport').disabled = false;
   document.getElementById('btnPrintReport').disabled = false;
+}
+function toggleDailyBreakdown(idx){
+  const row = document.getElementById('drRow'+idx);
+  const icon = document.getElementById('drIcon'+idx);
+  const show = row.style.display==='none';
+  row.style.display = show ? 'table-row' : 'none';
+  icon.textContent = show ? '▾' : '▸';
 }
 document.getElementById('btnGenReport').addEventListener('click', ()=>{
   const id = document.getElementById('repEmpleado').value;
