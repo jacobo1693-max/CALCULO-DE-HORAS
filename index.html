@@ -280,6 +280,7 @@
       <button data-tab="employees">Empleados</button>
       <button data-tab="contratos">Contratos</button>
       <button data-tab="baja">Renuncia y finiquito</button>
+      <button data-tab="bajaslista">Bajas</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -686,6 +687,13 @@
       <button class="btn secondary" id="btnImprimirFiniquito" disabled>Imprimir finiquito</button>
       <span class="sub" id="bajaMsg" style="margin:0;"></span>
     </div>
+  </section>
+
+  <!-- BAJAS (empleados dados de baja) -->
+  <section class="panel" id="panel-bajaslista">
+    <h2>Empleados dados de baja</h2>
+    <p class="sub">Aquí se quedan los empleados que ya diste de baja — no cuentan en el Dashboard ni aparecen para generar contratos nuevos, pero puedes seguir consultando su historial, reportes y documentos.</p>
+    <div id="bajasListaArea"></div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -1244,6 +1252,7 @@ async function loadStorage(){
   applyConfigToForm();
   buildTurDiasRows(null);
   renderEmployeesTable();
+  renderBajasLista();
   renderTurnosTable();
   renderCodigosTable();
   renderDepartamentosTable();
@@ -1462,7 +1471,7 @@ function refreshManualEmpleadoSelect(){
   const sel = document.getElementById('manualEmpleado');
   if(!sel) return;
   const cur = sel.value;
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
 }
@@ -1764,12 +1773,49 @@ function toggleEmployeeActivo(id){
   const idx = EMPLOYEES.findIndex(e=>e.id===id);
   if(idx===-1) return;
   const activo = EMPLOYEES[idx].activo !== false;
-  if(activo && !confirm('¿Dar de baja a este empleado? Ya no aparecerá en el selector de Contratos ni se contará en el Dashboard, pero su historial de checadas, reportes y documentos se conserva.')) return;
+  if(activo && !confirm('¿Dar de baja a este empleado? Ya no aparecerá en el selector de Contratos ni se contará en el Dashboard, pero su historial de checadas, reportes y documentos se conserva, y lo vas a poder ver en la sección "Bajas".')) return;
   EMPLOYEES[idx].activo = !activo;
   saveStorage();
   renderEmployeesTable();
   refreshAllEmployeeSelects();
+  renderBajasLista();
   toast(EMPLOYEES[idx].activo ? 'Empleado reactivado.' : 'Empleado dado de baja.');
+}
+function renderBajasLista(){
+  const area = document.getElementById('bajasListaArea');
+  if(!area) return;
+  const inactivos = EMPLOYEES.filter(e=>e.activo===false).sort((a,b)=>compareIdsNumeric(a.id,b.id));
+  if(!inactivos.length){ area.innerHTML = emptyState('No tienes empleados dados de baja por ahora.'); return; }
+  let html = `<table><thead><tr><th>Nombre</th><th>No.</th><th>Departamento</th><th>Puesto</th><th>Fecha de baja</th><th></th></tr></thead><tbody>`;
+  inactivos.forEach(e=>{
+    const fechaBaja = (e.separacion && e.separacion.fecha) ? e.separacion.fecha : '—';
+    html += `<tr>
+      <td><b>${e.nombre}</b></td>
+      <td class="mono">${e.id}</td>
+      <td>${e.depto||'—'}</td>
+      <td>${e.puesto||'—'}</td>
+      <td class="mono">${fechaBaja}</td>
+      <td>
+        <button class="btn secondary small" onclick="verReporteBaja('${e.id}')">Ver reporte</button>
+        <button class="btn secondary small" onclick="toggleEmployeeActivo('${e.id}')">Reactivar</button>
+      </td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function verReporteBaja(id){
+  const sel = document.getElementById('repEmpleado');
+  if(!Array.from(sel.options).some(o=>o.value===id)){
+    const opt = document.createElement('option');
+    opt.value = id; opt.textContent = employeeDisplayName(id) + ' (' + id + ') — dado de baja';
+    sel.appendChild(opt);
+  }
+  sel.value = id;
+  document.querySelector('nav.tabs button[data-tab="report"]').click();
+  if(!document.getElementById('repDesde').value) document.getElementById('repDesde').value = isoDate(new Date(Date.now()-30*86400000));
+  if(!document.getElementById('repHasta').value) document.getElementById('repHasta').value = isoDate(new Date());
+  generateEmployeeReport(id, document.getElementById('repDesde').value, document.getElementById('repHasta').value);
 }
 
 /* ---------- turnos (horario por día) ---------- */
@@ -2202,7 +2248,7 @@ function activeEmployeeIds(){
   });
 }
 function refreshAllEmployeeSelects(){
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   const opts = ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
 
   const rep = document.getElementById('repEmpleado'); const repCur = rep.value;
@@ -2556,7 +2602,7 @@ document.getElementById('frModo').addEventListener('change', ()=>{
   if(modo==='some') renderFRCheckList(document.getElementById('frBuscar').value);
 });
 function renderFRCheckList(filter){
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   const list = document.getElementById('frCheckList');
   const f = (filter||'').toLowerCase();
   const filtered = ids.filter(id=> employeeDisplayName(id).toLowerCase().includes(f) || id.toLowerCase().includes(f));
@@ -3251,7 +3297,7 @@ function refreshBajaEmpleadoSelect(){
   const sel = document.getElementById('bajaEmpleado');
   if(!sel) return;
   const cur = sel.value;
-  const ids = allKnownEmployeeIds();
+  const ids = activeEmployeeIds();
   sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
 }
@@ -3292,6 +3338,7 @@ document.getElementById('btnGuardarBaja').addEventListener('click', ()=>{
   saveStorage();
   renderEmployeesTable();
   refreshAllEmployeeSelects();
+  renderBajasLista();
   document.getElementById('btnImprimirRenuncia').disabled = false;
   document.getElementById('btnImprimirFiniquito').disabled = false;
   document.getElementById('bajaMsg').textContent = 'Datos guardados en la ficha del empleado.' + bajaMsgExtra;
