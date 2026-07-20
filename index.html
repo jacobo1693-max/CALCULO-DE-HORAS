@@ -2194,6 +2194,10 @@ function computePagoDia(id, fecha, totalMins){
 function getScheduleFor(id, fecha){
   const dow = new Date(fecha+'T00:00:00').getDay();
   const emp = EMPLOYEES.find(e=>e.id===id);
+  if(emp && emp.fecha && fecha < emp.fecha){
+    // Antes de su fecha de contratación: no le toca trabajar, así que no cuenta como falta.
+    return { activo:false, entrada:null, salidaFinal:null, tolerancia:0, expectedMins:0, overnight:false, flexible:false };
+  }
   if(emp && emp.turnoId){
     const t = TURNOS.find(x=>x.id===emp.turnoId);
     if(t && t.dias && t.dias[dow]){
