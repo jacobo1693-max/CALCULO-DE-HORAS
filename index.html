@@ -1279,12 +1279,8 @@ async function connectFirebase(cfg, isNewConnection){
     await firebase.auth().signInAnonymously();
     CLOUD_ENABLED = true;
     localStorage.setItem(LS_PREFIX+'firebaseConfig', JSON.stringify(cfg));
-    if(isNewConnection){
-      await cloudMergeOnConnect();
-      toast('Conectado — se combinaron tus datos de este navegador con los de la nube, sin borrar nada de ningún lado.');
-    } else {
-      await cloudPullAll();
-    }
+    await cloudMergeOnConnect();
+    if(isNewConnection) toast('Conectado — se combinaron tus datos de este navegador con los de la nube, sin borrar nada de ningún lado.');
     setCloudStatus('Conectado — los datos se sincronizan automáticamente entre dispositivos.', true);
     return true;
   }catch(e){
