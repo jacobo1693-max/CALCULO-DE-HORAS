@@ -1118,7 +1118,10 @@ function parseCombined(v){
 /* ---------- almacenamiento local del navegador ----------
    (persiste de verdad al recargar o actualizar la página, sin depender de nada externo) */
 const LS_PREFIX = 'bm160app_';
-const CLOUD_KEYS = ['bm160-punches','bm160-config','bm160-employees','bm160-turnos','bm160-codigos','bm160-departamentos','bm160-puestos','bm160-autorizaciones'];
+// Estas claves se guardan como un solo documento (son pequeñas: configuración, catálogos, etc.)
+const CLOUD_BLOB_KEYS = ['bm160-config','bm160-turnos','bm160-codigos','bm160-departamentos','bm160-puestos','bm160-autorizaciones'];
+// Estas dos se guardan registro por registro, porque pueden crecer mucho (miles de checadas, fotos de empleados)
+// y un solo documento de Firestore no puede pasar de 1 MB.
 let CLOUD_ENABLED = false;
 let fbDb = null;
 
@@ -1130,26 +1133,143 @@ function setCloudStatus(msg, ok){
 }
 async function cloudHasData(){
   try{
+    const snap = await fbDb.collection('bm160sync_employees').limit(1).get();
+    if(!snap.empty) return true;
     const doc = await fbDb.collection('bm160sync').doc('bm160-employees').get();
     return doc.exists;
   }catch(e){ return false; }
 }
+
+/* --- checadas: una por documento, id de documento = id del empleado + su marca de tiempo --- */
+async function cloudPushPunches(punches){
+  const CHUNK = 400; // límite de Firestore por lote (batch) es 500 operaciones
+  for(let i=0; i<punches.length; i+=CHUNK){
+    const batch = fbDb.batch();
+    punches.slice(i, i+CHUNK).forEach(p=>{
+      const ref = fbDb.collection('bm160sync_punches').doc(`${p.id}_${p.ts}`);
+      batch.set(ref, p);
+    });
+    await batch.commit();
+  }
+}
+async function cloudPullPunches(){
+  const snap = await fbDb.collection('bm160sync_punches').get();
+  const out = [];
+  snap.forEach(doc=>out.push(doc.data()));
+  return out;
+}
+
+/* --- empleados: uno por documento, id de documento = número de empleado --- */
+async function cloudPushEmployees(employees){
+  const CHUNK = 400;
+  for(let i=0; i<employees.length; i+=CHUNK){
+    const batch = fbDb.batch();
+    employees.slice(i, i+CHUNK).forEach(e=>{
+      const ref = fbDb.collection('bm160sync_employees').doc(String(e.id));
+      batch.set(ref, e);
+    });
+    await batch.commit();
+  }
+}
+async function cloudPullEmployees(){
+  const snap = await fbDb.collection('bm160sync_employees').get();
+  const out = [];
+  snap.forEach(doc=>out.push(doc.data()));
+  return out;
+}
+
 async function cloudPushAll(){
-  for(const key of CLOUD_KEYS){
+  for(const key of CLOUD_BLOB_KEYS){
     const raw = localStorage.getItem(LS_PREFIX+key);
     if(raw!=null){
       try{ await fbDb.collection('bm160sync').doc(key).set({ value: raw, updatedAt: Date.now() }); }
       catch(e){ console.error('Error subiendo', key, e); }
     }
   }
+  try{
+    const punchesRaw = localStorage.getItem(LS_PREFIX+'bm160-punches');
+    if(punchesRaw) await cloudPushPunches(JSON.parse(punchesRaw));
+  }catch(e){ console.error('Error subiendo checadas', e); }
+  try{
+    const empRaw = localStorage.getItem(LS_PREFIX+'bm160-employees');
+    if(empRaw) await cloudPushEmployees(JSON.parse(empRaw));
+  }catch(e){ console.error('Error subiendo empleados', e); }
 }
 async function cloudPullAll(){
-  for(const key of CLOUD_KEYS){
+  for(const key of CLOUD_BLOB_KEYS){
     try{
       const doc = await fbDb.collection('bm160sync').doc(key).get();
       if(doc.exists) localStorage.setItem(LS_PREFIX+key, doc.data().value);
     }catch(e){ console.error('Error descargando', key, e); }
   }
+  try{
+    const punches = await cloudPullPunches();
+    if(punches.length) localStorage.setItem(LS_PREFIX+'bm160-punches', JSON.stringify(punches));
+  }catch(e){ console.error('Error descargando checadas', e); }
+  try{
+    const employees = await cloudPullEmployees();
+    if(employees.length) localStorage.setItem(LS_PREFIX+'bm160-employees', JSON.stringify(employees));
+  }catch(e){ console.error('Error descargando empleados', e); }
+}
+function mergeEmployeeLists(localList, cloudList){
+  const byId = {};
+  (localList||[]).forEach(e=>{ if(e && e.id!=null) byId[e.id] = Object.assign({}, e); });
+  (cloudList||[]).forEach(e=>{
+    if(!e || e.id==null) return;
+    if(!byId[e.id]){
+      byId[e.id] = Object.assign({}, e);
+    } else {
+      const local = byId[e.id];
+      Object.keys(e).forEach(k=>{
+        const localVal = local[k];
+        const localVacio = localVal===undefined || localVal===null || localVal==='' || (k==='sueldoHora' && !localVal);
+        const nubeConValor = e[k]!==undefined && e[k]!==null && e[k]!=='';
+        if(localVacio && nubeConValor) local[k] = e[k];
+      });
+    }
+  });
+  return Object.values(byId);
+}
+function mergePunchLists(localList, cloudList){
+  const seen = new Set();
+  const out = [];
+  (localList||[]).concat(cloudList||[]).forEach(p=>{
+    if(!p) return;
+    const key = `${p.id}|${p.ts}`;
+    if(!seen.has(key)){ seen.add(key); out.push(p); }
+  });
+  return out;
+}
+async function cloudMergeOnConnect(){
+  // Ajustes generales (config, turnos, códigos...): si la nube ya tiene algo, se toma esa versión;
+  // si no, se sube la local. Son ajustes globales, no historial personal, así que no hay tanto riesgo.
+  for(const key of CLOUD_BLOB_KEYS){
+    const doc = await fbDb.collection('bm160sync').doc(key).get();
+    if(doc.exists){
+      localStorage.setItem(LS_PREFIX+key, doc.data().value);
+    } else {
+      const raw = localStorage.getItem(LS_PREFIX+key);
+      if(raw!=null) await fbDb.collection('bm160sync').doc(key).set({ value: raw, updatedAt: Date.now() });
+    }
+  }
+
+  // Empleados: se combinan por número de empleado, sin que se pierda nada de ningún lado.
+  const localEmpRaw = localStorage.getItem(LS_PREFIX+'bm160-employees');
+  const localEmp = localEmpRaw ? JSON.parse(localEmpRaw) : [];
+  const cloudEmp = await cloudPullEmployees();
+  const mergedEmp = mergeEmployeeLists(localEmp, cloudEmp);
+  localStorage.setItem(LS_PREFIX+'bm160-employees', JSON.stringify(mergedEmp));
+  await cloudPushEmployees(mergedEmp);
+
+  // Checadas: se juntan todas, sin duplicar.
+  const localPunchRaw = localStorage.getItem(LS_PREFIX+'bm160-punches');
+  const localPunch = localPunchRaw ? JSON.parse(localPunchRaw) : [];
+  const cloudPunch = await cloudPullPunches();
+  const mergedPunch = mergePunchLists(localPunch, cloudPunch);
+  localStorage.setItem(LS_PREFIX+'bm160-punches', JSON.stringify(mergedPunch));
+  const cloudKeys = new Set(cloudPunch.map(p=>`${p.id}|${p.ts}`));
+  const faltantes = mergedPunch.filter(p=>!cloudKeys.has(`${p.id}|${p.ts}`));
+  if(faltantes.length) await cloudPushPunches(faltantes);
 }
 async function connectFirebase(cfg, isNewConnection){
   try{
@@ -1160,9 +1280,8 @@ async function connectFirebase(cfg, isNewConnection){
     CLOUD_ENABLED = true;
     localStorage.setItem(LS_PREFIX+'firebaseConfig', JSON.stringify(cfg));
     if(isNewConnection){
-      const hasData = await cloudHasData();
-      if(hasData){ await cloudPullAll(); toast('Conectado — se descargaron los datos que ya había en la nube.'); }
-      else { await cloudPushAll(); toast('Conectado — tus datos de este navegador se subieron a la nube.'); }
+      await cloudMergeOnConnect();
+      toast('Conectado — se combinaron tus datos de este navegador con los de la nube, sin borrar nada de ningún lado.');
     } else {
       await cloudPullAll();
     }
@@ -1193,10 +1312,12 @@ const storage = {
   async set(key, value){
     try{
       localStorage.setItem(LS_PREFIX+key, value);
-      if(CLOUD_ENABLED && fbDb && CLOUD_KEYS.includes(key)){
-        if(value.length > 900000){
-          toast('Aviso: los datos de "'+key.replace('bm160-','')+'" son muy grandes (muchas fotos) y no se pudieron subir a la nube. Se quedaron guardados solo en este navegador.');
-        } else {
+      if(CLOUD_ENABLED && fbDb){
+        if(key === 'bm160-punches'){
+          try{ cloudPushPunches(JSON.parse(value)).catch(e=>console.error('cloud sync error (punches)', e)); }catch(e){}
+        } else if(key === 'bm160-employees'){
+          try{ cloudPushEmployees(JSON.parse(value)).catch(e=>console.error('cloud sync error (employees)', e)); }catch(e){}
+        } else if(CLOUD_BLOB_KEYS.includes(key)){
           fbDb.collection('bm160sync').doc(key).set({ value, updatedAt: Date.now() }).catch(e=>console.error('cloud sync error', e));
         }
       }
@@ -2159,33 +2280,17 @@ function computeDay(id, fecha){
     }
     totalMins = segments.reduce((s,x)=>s+x.mins,0);
   }
-
-  // Si llegó antes de su hora de entrada programada, esos minutos NO se cuentan por default
-  // (a menos que se autoricen explícitamente) — así no se le "regalan" horas por llegar temprano.
-  let recorteTempranoMins = 0;
-  if(segments.length && dayPunches.length && sched.activo && sched.entrada && !sched.flexible){
-    const entradaProgTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
-    const entradaRealTs = dayPunches[0].ts;
-    if(entradaRealTs < entradaProgTs && !isEarlyArrivalAuthorized(id, fecha)){
-      const diffMins = Math.round((entradaProgTs - entradaRealTs)/60000);
-      const primerSeg = segments[0];
-      const recorte = Math.min(diffMins, primerSeg.mins);
-      primerSeg.mins -= recorte;
-      totalMins -= recorte;
-      recorteTempranoMins = recorte;
-    }
-  }
-  return { punches: dayPunches, segments, totalMins, incomplete, recorteTempranoMins };
+  return { punches: dayPunches, segments, totalMins, incomplete };
 }
 function isEarlyArrivalAuthorized(id, fecha){
-  return AUTORIZACIONES[`${id}|${fecha}|temprano`] === true; // por default NO autorizada
+  return AUTORIZACIONES[`${id}|${fecha}|temprano`] === true; // por default NO autorizada (no se paga)
 }
 async function toggleEarlyAuthorization(id, fecha){
   const key = `${id}|${fecha}|temprano`;
   const was = isEarlyArrivalAuthorized(id, fecha);
   AUTORIZACIONES[key] = !was;
   await saveStorage();
-  toast(!was ? 'Llegada temprano autorizada — ya se cuenta esa hora.' : 'Llegada temprano ya no autorizada — ya no se cuenta esa hora.');
+  toast(!was ? 'Llegada temprano autorizada — ya se paga como hora extra.' : 'Llegada temprano ya no autorizada — ya no se paga.');
   if(window._lastReportParams){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
@@ -2210,17 +2315,41 @@ async function toggleAutorizacion(id, fecha){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
 }
-function computePagoDia(id, fecha, totalMins){
+function computePagoDia(id, fecha, totalMins, primeraChecadaTs){
   const sueldoHora = getSueldoHora(id);
   const sched = getScheduleFor(id, fecha);
   const jornadaMins = sched.expectedMins;
-  const normalMins = Math.min(totalMins, jornadaMins);
-  const extraMins = Math.max(0, totalMins - jornadaMins);
   const mult = CONFIG.multiplicador || 2;
-  const autorizado = isExtraAuthorized(id, fecha);
+
+  // Si llegó antes de su hora de entrada programada, esos minutos se separan como
+  // "hora extra de la mañana": se ven y se suman a las horas trabajadas, pero solo
+  // se PAGAN si se autorizan explícitamente (por default NO están autorizadas).
+  let extraTempranoMins = 0;
+  if(primeraChecadaTs!=null && sched.activo && sched.entrada && !sched.flexible){
+    const entradaProgTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
+    if(primeraChecadaTs < entradaProgTs){
+      extraTempranoMins = Math.min(Math.round((entradaProgTs - primeraChecadaTs)/60000), totalMins);
+    }
+  }
+  const autorizadoTemprano = isEarlyArrivalAuthorized(id, fecha);
+
+  const coreMins = Math.max(0, totalMins - extraTempranoMins); // trabajado desde su hora de entrada en adelante
+  const normalMins = Math.min(coreMins, jornadaMins);
+  const extraTardeMins = Math.max(0, coreMins - jornadaMins);
+  const autorizadoTarde = isExtraAuthorized(id, fecha);
+
+  const extraMins = extraTempranoMins + extraTardeMins; // para mostrar el total de horas extra del día
+  const autorizado = autorizadoTarde; // compatibilidad: autorización "general" sigue siendo la de salida tarde
+
   const pagoNormal = (normalMins/60) * sueldoHora;
-  const pagoExtra = autorizado ? (extraMins/60) * sueldoHora * mult : 0;
-  return { sueldoHora, normalMins, extraMins, autorizado, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra };
+  const pagoExtraTarde = autorizadoTarde ? (extraTardeMins/60) * sueldoHora * mult : 0;
+  const pagoExtraTemprano = autorizadoTemprano ? (extraTempranoMins/60) * sueldoHora * mult : 0;
+  const pagoExtra = pagoExtraTarde + pagoExtraTemprano;
+
+  return {
+    sueldoHora, normalMins, extraMins, autorizado, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra,
+    extraTempranoMins, autorizadoTemprano, extraTardeMins, autorizadoTarde
+  };
 }
 function getScheduleFor(id, fecha){
   const dow = new Date(fecha+'T00:00:00').getDay();
@@ -2322,7 +2451,7 @@ function computeEmployeePeriod(id, from, to){
     const sched = getScheduleFor(id, fecha);
     const info = computeDay(id, fecha);
     totalMins += info.totalMins;
-    const p = computePagoDia(id, fecha, info.totalMins);
+    const p = computePagoDia(id, fecha, info.totalMins, info.punches.length ? info.punches[0].ts : null);
     extraMins += p.extraMins;
     pagoNormal += p.pagoNormal;
     pagoExtra += p.pagoExtra;
@@ -2465,7 +2594,7 @@ function computeReportData(id, from, to){
   const sueldoHora = getSueldoHora(id);
   let totalExtraMins = 0, totalPagoNormal = 0, totalPagoExtra = 0;
   rows.forEach(r=>{
-    const p = computePagoDia(id, r.fecha, r.info.totalMins);
+    const p = computePagoDia(id, r.fecha, r.info.totalMins, r.info.punches.length ? r.info.punches[0].ts : null);
     r.pago = p;
     totalExtraMins += p.extraMins;
     totalPagoNormal += p.pagoNormal;
@@ -2503,21 +2632,26 @@ function reportTableHtml(rep){
     const pares = r.info.segments.length ? r.info.segments.map(s=>`${s.inTime.slice(0,5)}–${s.outTime.slice(0,5)}`).join(', ') : '—';
     let extraCell = '—';
     if(r.pago.extraMins>0){
-      const authTag = r.pago.autorizado ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
-      const btnLabel = r.pago.autorizado ? 'Quitar autorización' : 'Autorizar';
-      extraCell = `<div>${fmtHM(r.pago.extraMins)}</div><div style="margin-top:3px;">${authTag}</div><button class="btn secondary small" style="margin-top:5px;" onclick="toggleAutorizacion('${rep.id}','${r.fecha}')">${btnLabel}</button>`;
+      const partes = [];
+      if(r.pago.extraTempranoMins>0){
+        const tag = r.pago.autorizadoTemprano ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
+        const label = r.pago.autorizadoTemprano ? 'Quitar autorización' : 'Autorizar';
+        partes.push(`<div style="margin-bottom:6px;"><div>Mañana: ${fmtHM(r.pago.extraTempranoMins)}</div>${tag}<br><button class="btn secondary small" style="margin-top:4px;" onclick="toggleEarlyAuthorization('${rep.id}','${r.fecha}')">${label}</button></div>`);
+      }
+      if(r.pago.extraTardeMins>0){
+        const tag = r.pago.autorizadoTarde ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
+        const label = r.pago.autorizadoTarde ? 'Quitar autorización' : 'Autorizar';
+        partes.push(`<div><div>Salida: ${fmtHM(r.pago.extraTardeMins)}</div>${tag}<br><button class="btn secondary small" style="margin-top:4px;" onclick="toggleAutorizacion('${rep.id}','${r.fecha}')">${label}</button></div>`);
+      }
+      extraCell = partes.join('');
     }
     const abandonoMins = r.status==='ok' ? getAbandonoMinutos(rep.id, r.info.punches, r.fecha) : 0;
     const abandonoBtn = abandonoMins>0
       ? `<br><span class="tag late" title="Salió antes de su hora de salida programada">Salida anticipada · ${abandonoMins} min</span><br><button class="btn secondary small" style="margin-top:5px;" onclick="printActaAbandono('${rep.id}','${r.fecha}')">Generar acta por abandono</button>`
       : '';
-    const tempranoAutorizado = isEarlyArrivalAuthorized(rep.id, r.fecha);
-    const tempranoBtn = (r.info.recorteTempranoMins>0 || tempranoAutorizado)
-      ? `<br><span class="tag ${tempranoAutorizado?'ok':'late'}" title="Llegó antes de su hora de entrada">${tempranoAutorizado ? 'Llegada temprano autorizada' : `No se contó llegada temprano (${r.info.recorteTempranoMins} min)`}</span><br><button class="btn secondary small" style="margin-top:5px;" onclick="toggleEarlyAuthorization('${rep.id}','${r.fecha}')">${tempranoAutorizado?'Quitar autorización':'Autorizar llegada temprano'}</button>`
-      : '';
     html += `<tr>
       <td class="mono">${r.fecha}</td><td>${dName}</td>
-      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}${tempranoBtn}</td>
+      <td class="mono">${checks}${r.info.incomplete ? ' <span class="tag late" title="Número impar de checadas: se usó la primera como entrada y la última como salida final">impar</span>' : ''}</td>
       <td class="mono">${pares}</td>
       <td class="mono">${fmtHM(r.pago.normalMins)}</td>
       <td class="mono">${extraCell}</td>
