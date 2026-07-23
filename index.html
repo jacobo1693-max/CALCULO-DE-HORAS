@@ -516,6 +516,13 @@
           <input type="number" id="empBonoAnual" placeholder="Ej. 10 (entre 6 y 20)" min="0" max="100" step="0.5">
         </div>
         <div class="field">
+          <label>Tope de horas semanales para el bono</label>
+          <select id="empBonoTope">
+            <option value="48">48 horas</option>
+            <option value="51">51 horas</option>
+          </select>
+        </div>
+        <div class="field">
           <label>Turno asignado</label>
           <select id="empTurno"><option value="">-- sin turno específico --</option></select>
         </div>
@@ -524,7 +531,7 @@
           <select id="empCodigo"><option value="">-- sin código --</option></select>
         </div>
       </div>
-      <p class="sub" style="margin-top:-6px;">El bono anual se calcula semana por semana: horas trabajadas esa semana (tope de 51 horas, aunque haya trabajado más) × su sueldo por hora × este porcentaje. Se va acumulando para el total del año. Déjalo vacío si no aplica.</p>
+      <p class="sub" style="margin-top:-6px;">El bono anual se calcula semana por semana: horas trabajadas esa semana (topadas al máximo que elijas arriba, aunque haya trabajado más) × su sueldo por hora × este porcentaje. Se va acumulando para el total del año. Déjalo vacío si no aplica.</p>
       <div class="row" style="margin-top:14px;">
         <div class="field">
           <label>Foto</label>
@@ -1843,6 +1850,7 @@ function resetEmployeeForm(){
   document.getElementById('empPuesto').value='';
   document.getElementById('empSueldo').value='';
   document.getElementById('empBonoAnual').value='';
+  document.getElementById('empBonoTope').value='48';
   document.getElementById('empTurno').value='';
   document.getElementById('empCodigo').value='';
   document.getElementById('empFechaNac').value='';
@@ -1875,6 +1883,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     puesto: document.getElementById('empPuesto').value.trim(),
     sueldoHora: +document.getElementById('empSueldo').value || 0,
     bonoAnualPct: document.getElementById('empBonoAnual').value ? +document.getElementById('empBonoAnual').value : null,
+    bonoAnualTopeHoras: +document.getElementById('empBonoTope').value || 48,
     turnoId: document.getElementById('empTurno').value,
     codigoId: document.getElementById('empCodigo').value,
     fechaNac: document.getElementById('empFechaNac').value,
@@ -1929,6 +1938,7 @@ function editEmployee(id){
   document.getElementById('empPuesto').value = emp.puesto || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
   document.getElementById('empBonoAnual').value = (emp.bonoAnualPct!=null) ? emp.bonoAnualPct : '';
+  document.getElementById('empBonoTope').value = emp.bonoAnualTopeHoras || 48;
   document.getElementById('empTurno').value = emp.turnoId || '';
   document.getElementById('empCodigo').value = emp.codigoId || '';
   document.getElementById('empFechaNac').value = emp.fechaNac || '';
@@ -3246,7 +3256,7 @@ function computeBonoAnualAcumulado(id, anio){
   const emp = EMPLOYEES.find(e=>e.id===id);
   const pct = (emp && emp.bonoAnualPct!=null) ? +emp.bonoAnualPct : null;
   const sueldoHora = getSueldoHora(id);
-  const TOPE_HORAS_SEMANA = 51;
+  const TOPE_HORAS_SEMANA = (emp && emp.bonoAnualTopeHoras) ? +emp.bonoAnualTopeHoras : 48;
   if(!pct || !sueldoHora) return { pct, totalBono: 0, semanas: 0, aplica: false };
 
   const inicioAnio = new Date(anio, 0, 1);
