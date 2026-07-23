@@ -508,9 +508,20 @@
           <select id="empPuesto"><option value="">-- selecciona --</option></select>
         </div>
         <div class="field">
+          <label>Horas que debe trabajar por semana</label>
+          <input type="number" id="empHorasSemana" placeholder="Ej. 48" min="0" step="0.5">
+        </div>
+        <div class="field">
+          <label>Sueldo semanal</label>
+          <input type="number" id="empSueldoSemanal" placeholder="Ej. 2160.00" min="0" step="0.01">
+        </div>
+        <div class="field">
           <label>Sueldo por hora</label>
           <input type="number" id="empSueldo" placeholder="Ej. 45.50" min="0" step="0.01">
         </div>
+      </div>
+      <p class="sub" style="margin-top:-6px;">Si llenas "Horas por semana" y "Sueldo semanal", el sueldo por hora se calcula solo (sueldo semanal ÷ horas por semana). También puedes ignorar esos dos y escribir el sueldo por hora directamente.</p>
+      <div class="row" style="margin-top:14px;">
         <div class="field">
           <label>Bono anual por asistencia (%)</label>
           <input type="number" id="empBonoAnual" placeholder="Ej. 10 (entre 6 y 20)" min="0" max="100" step="0.5">
@@ -1841,6 +1852,15 @@ function refreshTurnoCodigoSelects(){
   const cSel = document.getElementById('empCodigo');
   cSel.innerHTML = '<option value="">-- sin código --</option>' + CODIGOS.map(c=>`<option value="${c.id}">${c.clave} — ${c.nombre}</option>`).join('');
 }
+function recalcularSueldoPorHora(){
+  const horas = +document.getElementById('empHorasSemana').value || 0;
+  const semanal = +document.getElementById('empSueldoSemanal').value || 0;
+  if(horas>0 && semanal>0){
+    document.getElementById('empSueldo').value = (semanal/horas).toFixed(2);
+  }
+}
+document.getElementById('empHorasSemana').addEventListener('input', recalcularSueldoPorHora);
+document.getElementById('empSueldoSemanal').addEventListener('input', recalcularSueldoPorHora);
 function resetEmployeeForm(){
   document.getElementById('empEditingKey').value='';
   document.getElementById('empNombre').value='';
@@ -1848,6 +1868,8 @@ function resetEmployeeForm(){
   document.getElementById('empFecha').value='';
   document.getElementById('empDepto').value='';
   document.getElementById('empPuesto').value='';
+  document.getElementById('empHorasSemana').value='';
+  document.getElementById('empSueldoSemanal').value='';
   document.getElementById('empSueldo').value='';
   document.getElementById('empBonoAnual').value='';
   document.getElementById('empBonoTope').value='48';
@@ -1882,6 +1904,8 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     depto: document.getElementById('empDepto').value.trim(),
     puesto: document.getElementById('empPuesto').value.trim(),
     sueldoHora: +document.getElementById('empSueldo').value || 0,
+    horasSemana: +document.getElementById('empHorasSemana').value || null,
+    sueldoSemanal: +document.getElementById('empSueldoSemanal').value || null,
     bonoAnualPct: document.getElementById('empBonoAnual').value ? +document.getElementById('empBonoAnual').value : null,
     bonoAnualTopeHoras: +document.getElementById('empBonoTope').value || 48,
     turnoId: document.getElementById('empTurno').value,
@@ -1936,6 +1960,8 @@ function editEmployee(id){
   document.getElementById('empDepto').value = emp.depto || '';
   ensureSelectHasOption('empPuesto', emp.puesto);
   document.getElementById('empPuesto').value = emp.puesto || '';
+  document.getElementById('empHorasSemana').value = emp.horasSemana || '';
+  document.getElementById('empSueldoSemanal').value = emp.sueldoSemanal || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
   document.getElementById('empBonoAnual').value = (emp.bonoAnualPct!=null) ? emp.bonoAnualPct : '';
   document.getElementById('empBonoTope').value = emp.bonoAnualTopeHoras || 48;
