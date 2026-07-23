@@ -1934,6 +1934,7 @@ function renderEmployeesTable(){
       <td>${codigo ? codigo.clave : '—'}</td>
       <td>${activo ? '<span class="tag ok">Activo</span>' : '<span class="tag absent">Dado de baja</span>'}</td>
       <td><button class="btn secondary small" onclick="editEmployee('${e.id}')">Editar</button>
+      <button class="btn secondary small" onclick="printHojaDeVida('${e.id}')">Hoja de vida</button>
       <button class="btn secondary small" onclick="toggleEmployeeActivo('${e.id}')">${activo ? 'Dar de baja' : 'Reactivar'}</button>
       <button class="btn danger small" onclick="deleteEmployee('${e.id}')">Eliminar</button></td>
     </tr>`;
@@ -3249,6 +3250,114 @@ function actaAbandonoHtml(id, fecha){
 }
 function printActaAbandono(id, fecha){
   document.getElementById('printArea').innerHTML = actaAbandonoHtml(id, fecha);
+  window.print();
+}
+function hojaDeVidaHtml(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp) return '<p>Empleado no encontrado.</p>';
+  const nombre = emp.nombre;
+  const turno = TURNOS.find(t=>t.id===emp.turnoId);
+  const codigo = CODIGOS.find(c=>c.id===emp.codigoId);
+  const activo = emp.activo !== false;
+
+  const hoy = new Date();
+  const inicioAnio = isoDate(new Date(hoy.getFullYear(),0,1));
+  const finRango = isoDate(hoy);
+  const resumen = computeEmployeePeriod(id, inicioAnio, finRango);
+
+  const fotoHtml = emp.foto
+    ? `<img src="${emp.foto}" style="width:110px; height:110px; object-fit:cover; border-radius:10px; border:1px solid #dbe1e8;">`
+    : `<div style="width:110px; height:110px; border-radius:10px; background:#eef1f4; border:1px solid #dbe1e8; display:flex; align-items:center; justify-content:center; font-family:Arial; font-weight:700; font-size:24px; color:#4b5b70;">${nombre.slice(0,2).toUpperCase()}</div>`;
+
+  const fila = (label, val) => `<tr><td style="padding:5px 10px 5px 0; color:#4b5b70; white-space:nowrap;">${label}</td><td style="padding:5px 0; font-weight:600;">${val || '—'}</td></tr>`;
+
+  const antiguedadTxt = emp.fecha ? fechaLarga(new Date(emp.fecha+'T00:00:00')) : '—';
+
+  let bajaBlock = '';
+  if(!activo){
+    const fechaBaja = (emp.separacion && emp.separacion.fecha) ? fechaLarga(new Date(emp.separacion.fecha+'T00:00:00')) : '—';
+    bajaBlock = `
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#b3261e;">Baja</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Estado', '<span style="color:#b3261e;">Dado de baja</span>')}
+        ${fila('Fecha de baja', fechaBaja)}
+      </table>`;
+  }
+
+  let contratoBlock = '';
+  if(emp.contrato){
+    const tipoTxt = emp.contrato.tipo==='prueba30' ? 'Prueba a 30 días' : 'Tiempo indeterminado';
+    contratoBlock = `
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Contrato</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Tipo de contrato', tipoTxt)}
+        ${fila('Fecha de celebración', emp.contrato.fechaCelebracion ? fechaLarga(new Date(emp.contrato.fechaCelebracion+'T00:00:00')) : '—')}
+        ${fila('Sueldo diario (contrato)', emp.contrato.sueldoDiario ? fmtMoney(emp.contrato.sueldoDiario) : '—')}
+      </table>`;
+  }
+
+  return `
+    <div style="max-width:100%; margin:0 auto; font-family:Arial, Helvetica, sans-serif; font-size:11pt; line-height:1.5;">
+      ${bajaLetterheadHtml ? bajaLetterheadHtml() : ''}
+      <h1 style="text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:16pt; letter-spacing:.04em; margin:10px 0 20px;"><b>HOJA DE VIDA DEL EMPLEADO</b></h1>
+
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        ${fotoHtml}
+        <div>
+          <div style="font-size:15pt; font-weight:700; color:#13233b;">${nombre}</div>
+          <div style="color:#4b5b70; margin-top:2px;">No. de empleado: <b>${emp.id}</b> · ${activo ? '<span style="color:#0b6e4f;">Activo</span>' : '<span style="color:#b3261e;">Dado de baja</span>'}</div>
+          <div style="color:#4b5b70; margin-top:2px;">${emp.puesto || 'Puesto no capturado'} — ${emp.depto || 'Departamento no capturado'}</div>
+        </div>
+      </div>
+
+      <h3 style="margin-top:20px; font-family:Arial; font-size:13pt; color:#13233b;">Datos personales</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Fecha de nacimiento', emp.fechaNac ? fechaLarga(new Date(emp.fechaNac+'T00:00:00')) : '—')}
+        ${fila('Sexo', emp.sexo)}
+        ${fila('Estado civil', emp.estadoCivil)}
+        ${fila('Domicilio', emp.domicilio)}
+        ${fila('CURP', emp.curp)}
+        ${fila('RFC', emp.rfc)}
+      </table>
+
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Datos laborales</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Puesto', emp.puesto)}
+        ${fila('Departamento', emp.depto)}
+        ${fila('Fecha de contratación', antiguedadTxt)}
+        ${fila('Turno asignado', turno ? turno.nombre : '—')}
+        ${fila('Código de pago', codigo ? `${codigo.clave} — ${codigo.nombre}` : '—')}
+        ${fila('Sueldo por hora', emp.sueldoHora ? fmtMoney(emp.sueldoHora) : '—')}
+        ${fila('Funciones', emp.funciones)}
+      </table>
+
+      ${emp.beneficiario ? `
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Beneficiario</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Nombre', emp.beneficiario)}
+        ${fila('Parentesco', emp.parentesco)}
+      </table>` : ''}
+
+      ${contratoBlock}
+      ${bajaBlock}
+
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Resumen de asistencia (${hoy.getFullYear()})</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Horas trabajadas', fmtHM(resumen.totalMins))}
+        ${fila('Horas extra', fmtHM(resumen.extraMins))}
+        ${fila('Retardos', resumen.retardos)}
+        ${fila('Faltas', resumen.faltas)}
+      </table>
+
+      <div class="sig-row" style="margin-top:50px;">
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Firma del empleado</div></div>
+        <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Recursos Humanos</div></div>
+      </div>
+    </div>
+  `;
+}
+function printHojaDeVida(id){
+  document.getElementById('printArea').innerHTML = hojaDeVidaHtml(id);
   window.print();
 }
 /* ---------- número a letras (para el sueldo diario en los contratos) ---------- */
