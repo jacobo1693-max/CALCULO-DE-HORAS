@@ -874,9 +874,11 @@
       </div>
       <div class="row" style="margin-top:16px;">
         <button class="btn" id="btnConnectCloud">Conectar y sincronizar</button>
+        <button class="btn secondary" id="btnSyncNow">Sincronizar ahora</button>
         <button class="btn secondary" id="btnDisconnectCloud">Desconectar (usar solo este navegador)</button>
         <span class="sub" id="cloudMsg" style="margin:0;"></span>
       </div>
+      <p class="sub" style="margin-top:10px;">La app ya no descarga ni combina nada de la nube por sí sola al abrirla — siempre vas a ver primero lo que está guardado en este navegador. Dale clic a <b>"Sincronizar ahora"</b> cuando quieras traer lo nuevo que haya subido el checador u otro dispositivo.</p>
     </div>
   </section>
 
@@ -1303,7 +1305,7 @@ async function connectFirebase(cfg, isNewConnection){
     localStorage.setItem(LS_PREFIX+'firebaseConfig', JSON.stringify(cfg));
     await cloudMergeOnConnect();
     if(isNewConnection) toast('Conectado — se combinaron tus datos de este navegador con los de la nube, sin borrar nada de ningún lado.');
-    setCloudStatus('Conectado — los datos se sincronizan automáticamente entre dispositivos.', true);
+    setCloudStatus('Conectado. Los cambios que hagas aquí se suben solos. Usa "Sincronizar ahora" para traer cambios hechos en otros dispositivos.', true);
     return true;
   }catch(e){
     console.error(e);
@@ -1311,10 +1313,36 @@ async function connectFirebase(cfg, isNewConnection){
     return false;
   }
 }
-async function initCloudFromSavedConfig(){
+async function enableCloudWriteOnly(){
+  // Al abrir la app, NO se descarga ni se combina nada de la nube automáticamente
+  // (eso causaba que se vieran datos incompletos o inconsistentes mientras se
+  // procesaba). Solo se deja lista la conexión para que los cambios que hagas de
+  // aquí en adelante se suban solos. Para traer lo nuevo de la nube (por ejemplo
+  // lo que suba el checador), usa el botón "Sincronizar ahora" cuando tú quieras.
   const raw = localStorage.getItem(LS_PREFIX+'firebaseConfig');
   if(!raw) return;
-  try{ await connectFirebase(JSON.parse(raw), false); }catch(e){ /* se queda solo local */ }
+  try{
+    const cfg = JSON.parse(raw);
+    if(firebase.apps && firebase.apps.length){ await firebase.app().delete(); }
+    firebase.initializeApp(cfg);
+    fbDb = firebase.firestore();
+    await firebase.auth().signInAnonymously();
+    CLOUD_ENABLED = true;
+    setCloudStatus('Conectado. Los cambios que hagas aquí se suben solos. Usa "Sincronizar ahora" para traer cambios hechos en otros dispositivos.', true);
+  }catch(e){
+    console.error(e);
+    CLOUD_ENABLED = false;
+    setCloudStatus('No se pudo conectar a la nube en este momento — se está usando solo la información guardada en este navegador.', false);
+  }
+}
+async function syncNowButton(){
+  if(!CLOUD_ENABLED || !fbDb){ toast('Primero conecta la nube en "Sincronización en la nube".'); return; }
+  setCloudStatus('Sincronizando… esto puede tardar unos segundos si hay muchas checadas.', true);
+  toast('Sincronizando con la nube, espera un momento…');
+  await cloudMergeOnConnect();
+  await loadLocalIntoMemory();
+  setCloudStatus('Conectado. Los cambios que hagas aquí se suben solos. Usa "Sincronizar ahora" para traer cambios hechos en otros dispositivos.', true);
+  toast('Sincronización terminada.');
 }
 
 /* ---------- almacenamiento local del navegador ----------
@@ -1403,8 +1431,8 @@ async function loadLocalIntoMemory(){
   renderDashboard();
 }
 async function loadStorage(){
-  await initCloudFromSavedConfig();
   await loadLocalIntoMemory();
+  await enableCloudWriteOnly();
 }
 function applyConfigToForm(){
   document.getElementById('cfgEmpresa').value = CONFIG.empresaNombre || '';
@@ -1441,8 +1469,8 @@ function applyCloudFormState(){
       document.getElementById('fbStorageBucket').value = cfg.storageBucket || '';
       document.getElementById('fbSenderId').value = cfg.messagingSenderId || '';
       document.getElementById('fbAppId').value = cfg.appId || '';
-      if(CLOUD_ENABLED) setCloudStatus('Conectado — los datos se sincronizan automáticamente entre dispositivos.', true);
-      else setCloudStatus('Se guardó una conexión, pero no se pudo enlazar ahora. Revisa tu internet y da clic en "Conectar y sincronizar".', false);
+      if(CLOUD_ENABLED) setCloudStatus('Conectado. Los cambios que hagas aquí se suben solos. Usa "Sincronizar ahora" para traer cambios hechos en otros dispositivos.', true);
+      else setCloudStatus('Conectando…', false);
     }
   }catch(e){}
 }
@@ -2255,6 +2283,7 @@ document.getElementById('btnConnectCloud').addEventListener('click', async ()=>{
     loadLocalIntoMemory();
   }
 });
+document.getElementById('btnSyncNow').addEventListener('click', syncNowButton);
 document.getElementById('btnDisconnectCloud').addEventListener('click', ()=>{
   if(!confirm('¿Dejar de sincronizar con la nube? Este navegador seguirá usando sus propios datos guardados localmente.')) return;
   CLOUD_ENABLED = false;
