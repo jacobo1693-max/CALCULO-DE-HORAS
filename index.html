@@ -283,6 +283,7 @@
       <button data-tab="contratos">Contratos</button>
       <button data-tab="baja">Renuncia y finiquito</button>
       <button data-tab="bajaslista">Bajas</button>
+      <button data-tab="vacaciones">Vacaciones</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -701,6 +702,37 @@
     <h2>Empleados dados de baja</h2>
     <p class="sub">Aquí se quedan los empleados que ya diste de baja — no cuentan en el Dashboard ni aparecen para generar contratos nuevos, pero puedes seguir consultando su historial, reportes y documentos.</p>
     <div id="bajasListaArea"></div>
+  </section>
+
+  <!-- VACACIONES -->
+  <section class="panel" id="panel-vacaciones">
+    <h2>Control de vacaciones</h2>
+    <p class="sub">Los días que le corresponden a cada empleado se calculan según su antigüedad, con la tabla de la Ley Federal del Trabajo (reforma de "vacaciones dignas" 2023). El periodo de cada quien se cuenta desde su aniversario laboral, no desde el 1 de enero.</p>
+    <div id="vacacionesResumenArea"></div>
+
+    <h3 style="margin-top:26px;">Registrar días tomados</h3>
+    <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Empleado</label>
+          <select id="vacEmpleado"></select>
+        </div>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="vacFecha">
+        </div>
+        <div class="field">
+          <label>Días tomados</label>
+          <input type="number" id="vacDias" min="0.5" step="0.5" placeholder="Ej. 5">
+        </div>
+        <div class="field" style="min-width:220px;">
+          <label>Nota (opcional)</label>
+          <input type="text" id="vacNota" placeholder="Ej. Vacaciones de verano">
+        </div>
+        <button class="btn" id="btnAddVacacion">Registrar</button>
+      </div>
+      <div id="vacHistorialArea" style="margin-top:14px;"></div>
+    </div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -1498,6 +1530,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
     document.getElementById('topbarTitle').textContent = btn.textContent;
     if(btn.dataset.tab === 'dashboard') renderDashboard();
+    if(btn.dataset.tab === 'vacaciones') renderVacacionesResumen();
   });
 });
 document.querySelectorAll('.subtabs button').forEach(btn=>{
@@ -2500,6 +2533,8 @@ function refreshAllEmployeeSelects(){
   refreshContratoEmpleadoSelect();
   refreshBajaEmpleadoSelect();
   refreshManualEmpleadoSelect();
+  refreshVacEmpleadoSelect();
+  renderVacacionesResumen();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -3086,6 +3121,127 @@ function mondayWeekRange(fechaStr){
   const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
   return { from: isoDate(monday), to: isoDate(sunday) };
 }
+function diasVacacionesLFT(anios){
+  if(anios < 1) return 0;
+  const tabla = {1:12, 2:14, 3:16, 4:18, 5:20};
+  if(tabla[anios]!=null) return tabla[anios];
+  if(anios<=10) return 22;
+  if(anios<=15) return 24;
+  if(anios<=20) return 26;
+  if(anios<=25) return 28;
+  if(anios<=30) return 30;
+  const tramos = Math.floor((anios-30)/5)+1;
+  return 30 + tramos*2;
+}
+function antiguedadInfo(fechaContratacionStr){
+  if(!fechaContratacionStr) return null;
+  const inicio = new Date(fechaContratacionStr+'T00:00:00');
+  const hoy = new Date();
+  let anios = hoy.getFullYear() - inicio.getFullYear();
+  const aniversarioEsteAnio = new Date(hoy.getFullYear(), inicio.getMonth(), inicio.getDate());
+  if(hoy < aniversarioEsteAnio) anios--;
+  if(anios < 0) anios = 0;
+  const ultimoAniversario = new Date(inicio); ultimoAniversario.setFullYear(inicio.getFullYear()+anios);
+  const proximoAniversario = new Date(ultimoAniversario); proximoAniversario.setFullYear(ultimoAniversario.getFullYear()+1);
+  return { anios, ultimoAniversario, proximoAniversario };
+}
+function computeVacacionesEmpleado(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp || !emp.fecha) return { anios:0, corresponden:0, tomados:0, restantes:0, periodoInicio:null, periodoFin:null };
+  const info = antiguedadInfo(emp.fecha);
+  if(!info || info.anios<1) return { anios: info?info.anios:0, corresponden:0, tomados:0, restantes:0, periodoInicio:null, periodoFin:null };
+  const corresponden = diasVacacionesLFT(info.anios);
+  const registros = emp.vacacionesTomadas || [];
+  const inicioPeriodo = isoDate(info.ultimoAniversario);
+  const finPeriodo = isoDate(info.proximoAniversario);
+  const tomados = registros.filter(r=>r.fecha>=inicioPeriodo && r.fecha<finPeriodo).reduce((s,r)=>s+(+r.dias||0),0);
+  return { anios: info.anios, corresponden, tomados, restantes: Math.max(0, corresponden-tomados), periodoInicio: inicioPeriodo, periodoFin: finPeriodo };
+}
+function renderVacacionesResumen(){
+  const area = document.getElementById('vacacionesResumenArea');
+  if(!area) return;
+  const ids = activeEmployeeIds();
+  if(!ids.length){ area.innerHTML = emptyState('No hay empleados activos registrados todavía.'); return; }
+  let html = `<table><thead><tr><th>Empleado</th><th>No.</th><th>Antigüedad</th><th>Periodo actual</th><th>Le corresponden</th><th>Tomados</th><th>Restantes</th></tr></thead><tbody>`;
+  ids.forEach(id=>{
+    const nombre = employeeDisplayName(id);
+    const v = computeVacacionesEmpleado(id);
+    const periodoTxt = v.periodoInicio ? `${v.periodoInicio} al ${v.periodoFin}` : '—';
+    const restCls = v.restantes<=0 && v.corresponden>0 ? 'absent' : (v.restantes<v.corresponden ? 'late' : 'ok');
+    html += `<tr>
+      <td><b>${nombre}</b></td>
+      <td class="mono">${id}</td>
+      <td>${v.anios} año${v.anios===1?'':'s'}</td>
+      <td class="mono" style="font-size:11.5px;">${periodoTxt}</td>
+      <td class="mono">${v.corresponden}</td>
+      <td class="mono">${v.tomados}</td>
+      <td><span class="tag ${restCls}">${v.restantes}</span></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function refreshVacEmpleadoSelect(){
+  const sel = document.getElementById('vacEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = activeEmployeeIds();
+  sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+function renderVacHistorial(){
+  const id = document.getElementById('vacEmpleado').value;
+  const area = document.getElementById('vacHistorialArea');
+  if(!id){ area.innerHTML = ''; return; }
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const registros = (emp && emp.vacacionesTomadas) ? [...emp.vacacionesTomadas] : [];
+  if(!registros.length){ area.innerHTML = emptyState('Este empleado no tiene días de vacaciones registrados todavía.'); return; }
+  registros.sort((a,b)=> a.fecha<b.fecha?1:-1);
+  let html = `<table><thead><tr><th>Fecha</th><th>Días</th><th>Nota</th><th></th></tr></thead><tbody>`;
+  registros.forEach((r,idx)=>{
+    html += `<tr>
+      <td class="mono">${r.fecha}</td>
+      <td class="mono">${r.dias}</td>
+      <td>${r.nota||'—'}</td>
+      <td><button class="btn danger small" onclick="deleteVacacionRegistro('${id}','${r.fecha}',${idx})">Eliminar</button></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function deleteVacacionRegistro(id, fecha, idx){
+  if(!confirm('¿Eliminar este registro de vacaciones?')) return;
+  const i = EMPLOYEES.findIndex(e=>e.id===id);
+  if(i===-1) return;
+  const registros = EMPLOYEES[i].vacacionesTomadas || [];
+  const ordenados = [...registros].sort((a,b)=> a.fecha<b.fecha?1:-1);
+  const objetivo = ordenados[idx];
+  const realIdx = registros.findIndex(r=>r===objetivo);
+  if(realIdx>-1) registros.splice(realIdx,1);
+  EMPLOYEES[i].vacacionesTomadas = registros;
+  saveStorage();
+  renderVacHistorial();
+  renderVacacionesResumen();
+  toast('Registro eliminado.');
+}
+document.getElementById('vacEmpleado').addEventListener('change', renderVacHistorial);
+document.getElementById('btnAddVacacion').addEventListener('click', ()=>{
+  const id = document.getElementById('vacEmpleado').value;
+  const fecha = document.getElementById('vacFecha').value;
+  const dias = +document.getElementById('vacDias').value;
+  const nota = document.getElementById('vacNota').value.trim();
+  if(!id || !fecha || !dias){ toast('Completa empleado, fecha y días.'); return; }
+  const i = EMPLOYEES.findIndex(e=>e.id===id);
+  if(i===-1){ toast('Empleado no encontrado.'); return; }
+  if(!EMPLOYEES[i].vacacionesTomadas) EMPLOYEES[i].vacacionesTomadas = [];
+  EMPLOYEES[i].vacacionesTomadas.push({ fecha, dias, nota });
+  saveStorage();
+  document.getElementById('vacDias').value = '';
+  document.getElementById('vacNota').value = '';
+  renderVacHistorial();
+  renderVacacionesResumen();
+  toast('Días de vacaciones registrados.');
+});
 function computeBonoAnualAcumulado(id, anio){
   const emp = EMPLOYEES.find(e=>e.id===id);
   const pct = (emp && emp.bonoAnualPct!=null) ? +emp.bonoAnualPct : null;
@@ -3301,6 +3457,7 @@ function hojaDeVidaHtml(id){
   const finRango = isoDate(hoy);
   const resumen = computeEmployeePeriod(id, inicioAnio, finRango);
   const bonoAnual = computeBonoAnualAcumulado(id, hoy.getFullYear());
+  const vac = computeVacacionesEmpleado(id);
 
   const fotoHtml = emp.foto
     ? `<img src="${emp.foto}" style="width:110px; height:110px; object-fit:cover; border-radius:10px; border:1px solid #dbe1e8;">`
@@ -3394,6 +3551,15 @@ function hojaDeVidaHtml(id){
         ${fila('Bono acumulado a la fecha', fmtMoney(bonoAnual.totalBono))}
       </table>
       <p style="font-size:9.5pt; color:#4b5b70; margin-top:4px;">Se calcula semana por semana: horas trabajadas esa semana (tope de ${bonoAnual.tope} horas) × sueldo por hora × ${bonoAnual.pct}%, acumulado a lo largo del año.</p>` : ''}
+
+      ${vac.corresponden>0 ? `
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Vacaciones (periodo actual)</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Periodo', vac.periodoInicio ? `${vac.periodoInicio} al ${vac.periodoFin}` : '—')}
+        ${fila('Le corresponden', vac.corresponden+' días')}
+        ${fila('Tomados', vac.tomados+' días')}
+        ${fila('Restantes', vac.restantes+' días')}
+      </table>` : ''}
 
       <div class="sig-row" style="margin-top:50px;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Firma del empleado</div></div>
