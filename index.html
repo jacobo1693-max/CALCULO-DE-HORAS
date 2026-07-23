@@ -511,6 +511,10 @@
           <input type="number" id="empSueldo" placeholder="Ej. 45.50" min="0" step="0.01">
         </div>
         <div class="field">
+          <label>Bono anual por asistencia (%)</label>
+          <input type="number" id="empBonoAnual" placeholder="Ej. 10 (entre 6 y 20)" min="0" max="100" step="0.5">
+        </div>
+        <div class="field">
           <label>Turno asignado</label>
           <select id="empTurno"><option value="">-- sin turno específico --</option></select>
         </div>
@@ -519,6 +523,7 @@
           <select id="empCodigo"><option value="">-- sin código --</option></select>
         </div>
       </div>
+      <p class="sub" style="margin-top:-6px;">El bono anual se calcula semana por semana: horas trabajadas esa semana (tope de 51 horas, aunque haya trabajado más) × su sueldo por hora × este porcentaje. Se va acumulando para el total del año. Déjalo vacío si no aplica.</p>
       <div class="row" style="margin-top:14px;">
         <div class="field">
           <label>Foto</label>
@@ -1804,6 +1809,7 @@ function resetEmployeeForm(){
   document.getElementById('empDepto').value='';
   document.getElementById('empPuesto').value='';
   document.getElementById('empSueldo').value='';
+  document.getElementById('empBonoAnual').value='';
   document.getElementById('empTurno').value='';
   document.getElementById('empCodigo').value='';
   document.getElementById('empFechaNac').value='';
@@ -1835,6 +1841,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     depto: document.getElementById('empDepto').value.trim(),
     puesto: document.getElementById('empPuesto').value.trim(),
     sueldoHora: +document.getElementById('empSueldo').value || 0,
+    bonoAnualPct: document.getElementById('empBonoAnual').value ? +document.getElementById('empBonoAnual').value : null,
     turnoId: document.getElementById('empTurno').value,
     codigoId: document.getElementById('empCodigo').value,
     fechaNac: document.getElementById('empFechaNac').value,
@@ -1888,6 +1895,7 @@ function editEmployee(id){
   ensureSelectHasOption('empPuesto', emp.puesto);
   document.getElementById('empPuesto').value = emp.puesto || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
+  document.getElementById('empBonoAnual').value = (emp.bonoAnualPct!=null) ? emp.bonoAnualPct : '';
   document.getElementById('empTurno').value = emp.turnoId || '';
   document.getElementById('empCodigo').value = emp.codigoId || '';
   document.getElementById('empFechaNac').value = emp.fechaNac || '';
@@ -3078,6 +3086,34 @@ function mondayWeekRange(fechaStr){
   const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
   return { from: isoDate(monday), to: isoDate(sunday) };
 }
+function computeBonoAnualAcumulado(id, anio){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const pct = (emp && emp.bonoAnualPct!=null) ? +emp.bonoAnualPct : null;
+  const sueldoHora = getSueldoHora(id);
+  const TOPE_HORAS_SEMANA = 51;
+  if(!pct || !sueldoHora) return { pct, totalBono: 0, semanas: 0, aplica: false };
+
+  const inicioAnio = new Date(anio, 0, 1);
+  const finAnio = new Date(anio, 11, 31);
+  let cursor = new Date(inicioAnio);
+  const dow0 = cursor.getDay();
+  cursor.setDate(cursor.getDate() + ((dow0===0) ? -6 : 1-dow0)); // arrancar en el lunes de esa semana
+
+  let totalBono = 0, semanas = 0;
+  while(cursor <= finAnio){
+    const finSemana = new Date(cursor); finSemana.setDate(cursor.getDate()+6);
+    const from = isoDate(cursor), to = isoDate(finSemana);
+    const r = computeEmployeePeriod(id, from, to);
+    const horasSemana = r.totalMins/60;
+    if(horasSemana > 0){
+      const horasTope = Math.min(horasSemana, TOPE_HORAS_SEMANA);
+      totalBono += horasTope * sueldoHora * (pct/100);
+      semanas++;
+    }
+    cursor.setDate(cursor.getDate()+7);
+  }
+  return { pct, totalBono, semanas, aplica: true, tope: TOPE_HORAS_SEMANA };
+}
 function findWeeklyClusters(datesSorted){
   // Busca grupos de 3 o más fechas (ya ordenadas) que caben dentro de cualquier ventana de 7 días seguidos,
   // sin importar si cruzan de una semana calendario a otra.
@@ -3264,6 +3300,7 @@ function hojaDeVidaHtml(id){
   const inicioAnio = isoDate(new Date(hoy.getFullYear(),0,1));
   const finRango = isoDate(hoy);
   const resumen = computeEmployeePeriod(id, inicioAnio, finRango);
+  const bonoAnual = computeBonoAnualAcumulado(id, hoy.getFullYear());
 
   const fotoHtml = emp.foto
     ? `<img src="${emp.foto}" style="width:110px; height:110px; object-fit:cover; border-radius:10px; border:1px solid #dbe1e8;">`
@@ -3348,6 +3385,15 @@ function hojaDeVidaHtml(id){
         ${fila('Retardos', resumen.retardos)}
         ${fila('Faltas', resumen.faltas)}
       </table>
+
+      ${bonoAnual.aplica ? `
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Bono anual por asistencia</h3>
+      <table style="width:100%; border-collapse:collapse; font-size:11pt;">
+        ${fila('Porcentaje asignado', bonoAnual.pct+'%')}
+        ${fila('Semanas acumuladas', bonoAnual.semanas)}
+        ${fila('Bono acumulado a la fecha', fmtMoney(bonoAnual.totalBono))}
+      </table>
+      <p style="font-size:9.5pt; color:#4b5b70; margin-top:4px;">Se calcula semana por semana: horas trabajadas esa semana (tope de ${bonoAnual.tope} horas) × sueldo por hora × ${bonoAnual.pct}%, acumulado a lo largo del año.</p>` : ''}
 
       <div class="sig-row" style="margin-top:50px;">
         <div class="sig-col"><div class="sig-line"></div><div class="sig-label">Firma del empleado</div></div>
