@@ -1240,36 +1240,58 @@ function mergePunchLists(localList, cloudList){
   });
   return out;
 }
+async function cloudPushEmployeesDelta(mergedEmp, cloudEmp){
+  const cloudById = {};
+  (cloudEmp||[]).forEach(e=>{ if(e && e.id!=null) cloudById[e.id] = e; });
+  const toPush = (mergedEmp||[]).filter(e=>{
+    const c = cloudById[e.id];
+    if(!c) return true;
+    return JSON.stringify(c) !== JSON.stringify(e);
+  });
+  if(toPush.length) await cloudPushEmployees(toPush);
+}
 async function cloudMergeOnConnect(){
   // Ajustes generales (config, turnos, códigos...): si la nube ya tiene algo, se toma esa versión;
-  // si no, se sube la local. Son ajustes globales, no historial personal, así que no hay tanto riesgo.
+  // si no, se sube la local. Cada clave se protege por separado: si una falla, las demás igual se procesan.
   for(const key of CLOUD_BLOB_KEYS){
-    const doc = await fbDb.collection('bm160sync').doc(key).get();
-    if(doc.exists){
-      localStorage.setItem(LS_PREFIX+key, doc.data().value);
-    } else {
-      const raw = localStorage.getItem(LS_PREFIX+key);
-      if(raw!=null) await fbDb.collection('bm160sync').doc(key).set({ value: raw, updatedAt: Date.now() });
-    }
+    try{
+      const doc = await fbDb.collection('bm160sync').doc(key).get();
+      if(doc.exists){
+        localStorage.setItem(LS_PREFIX+key, doc.data().value);
+      } else {
+        const raw = localStorage.getItem(LS_PREFIX+key);
+        if(raw!=null) await fbDb.collection('bm160sync').doc(key).set({ value: raw, updatedAt: Date.now() });
+      }
+    }catch(e){ console.error('Error sincronizando', key, e); }
   }
 
-  // Empleados: se combinan por número de empleado, sin que se pierda nada de ningún lado.
-  const localEmpRaw = localStorage.getItem(LS_PREFIX+'bm160-employees');
-  const localEmp = localEmpRaw ? JSON.parse(localEmpRaw) : [];
-  const cloudEmp = await cloudPullEmployees();
-  const mergedEmp = mergeEmployeeLists(localEmp, cloudEmp);
-  localStorage.setItem(LS_PREFIX+'bm160-employees', JSON.stringify(mergedEmp));
-  await cloudPushEmployees(mergedEmp);
+  // Empleados: SIEMPRE se combinan por número de empleado, nunca se sobrescriben sin combinar.
+  // Esto corre pase lo que pase con lo de arriba, y solo sube a la nube los que de verdad cambiaron
+  // (no todos), para no gastar cuota de más cada vez que se abre la app.
+  try{
+    const localEmpRaw = localStorage.getItem(LS_PREFIX+'bm160-employees');
+    const localEmp = localEmpRaw ? JSON.parse(localEmpRaw) : [];
+    const cloudEmp = await cloudPullEmployees();
+    const mergedEmp = mergeEmployeeLists(localEmp, cloudEmp);
+    localStorage.setItem(LS_PREFIX+'bm160-employees', JSON.stringify(mergedEmp));
+    try{ await cloudPushEmployeesDelta(mergedEmp, cloudEmp); }
+    catch(e){ console.error('Error subiendo empleados a la nube (los datos locales están a salvo):', e); }
+  }catch(e){ console.error('Error combinando empleados (se conservan los datos locales sin cambios):', e); }
 
-  // Checadas: se juntan todas, sin duplicar.
-  const localPunchRaw = localStorage.getItem(LS_PREFIX+'bm160-punches');
-  const localPunch = localPunchRaw ? JSON.parse(localPunchRaw) : [];
-  const cloudPunch = await cloudPullPunches();
-  const mergedPunch = mergePunchLists(localPunch, cloudPunch);
-  localStorage.setItem(LS_PREFIX+'bm160-punches', JSON.stringify(mergedPunch));
-  const cloudKeys = new Set(cloudPunch.map(p=>`${p.id}|${p.ts}`));
-  const faltantes = mergedPunch.filter(p=>!cloudKeys.has(`${p.id}|${p.ts}`));
-  if(faltantes.length) await cloudPushPunches(faltantes);
+  // Checadas: se juntan todas, sin duplicar, protegido de la misma forma.
+  try{
+    const localPunchRaw = localStorage.getItem(LS_PREFIX+'bm160-punches');
+    const localPunch = localPunchRaw ? JSON.parse(localPunchRaw) : [];
+    const cloudPunch = await cloudPullPunches();
+    const mergedPunch = mergePunchLists(localPunch, cloudPunch);
+    localStorage.setItem(LS_PREFIX+'bm160-punches', JSON.stringify(mergedPunch));
+    const cloudKeys = new Set(cloudPunch.map(p=>`${p.id}|${p.ts}`));
+    const faltantes = mergedPunch.filter(p=>!cloudKeys.has(`${p.id}|${p.ts}`));
+    if(faltantes.length){
+      try{ await cloudPushPunches(faltantes); }
+      catch(e){ console.error('Error subiendo checadas a la nube (los datos locales están a salvo):', e); }
+    }
+  }catch(e){ console.error('Error combinando checadas (se conservan los datos locales sin cambios):', e); }
 }
 async function connectFirebase(cfg, isNewConnection){
   try{
@@ -1339,8 +1361,7 @@ async function saveStorage(){
     await storage.set('bm160-autorizaciones', JSON.stringify(AUTORIZACIONES), false);
   }catch(e){ console.error('storage error', e); }
 }
-async function loadStorage(){
-  await initCloudFromSavedConfig();
+async function loadLocalIntoMemory(){
   try{ const p = await storage.get('bm160-punches', false); if(p&&p.value) PUNCHES = JSON.parse(p.value); }catch(e){ PUNCHES=[]; }
   try{ const c = await storage.get('bm160-config', false); if(c&&c.value) CONFIG = JSON.parse(c.value); }catch(e){}
   try{ const e2 = await storage.get('bm160-employees', false); if(e2&&e2.value) EMPLOYEES = JSON.parse(e2.value); }catch(e){ EMPLOYEES=[]; }
@@ -1380,6 +1401,10 @@ async function loadStorage(){
   const now = new Date();
   document.getElementById('calMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
   renderDashboard();
+}
+async function loadStorage(){
+  await initCloudFromSavedConfig();
+  await loadLocalIntoMemory();
 }
 function applyConfigToForm(){
   document.getElementById('cfgEmpresa').value = CONFIG.empresaNombre || '';
@@ -2227,7 +2252,7 @@ document.getElementById('btnConnectCloud').addEventListener('click', async ()=>{
   const ok = await connectFirebase(cfg, true);
   if(ok){
     toast('¡Conectado! Recarga la página en tus otros dispositivos para que jalen los mismos datos.');
-    loadStorage();
+    loadLocalIntoMemory();
   }
 });
 document.getElementById('btnDisconnectCloud').addEventListener('click', ()=>{
