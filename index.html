@@ -4,12 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Control de Asistencia · Checador BM160</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- La librería de Excel y Firebase ya NO se cargan aquí: se piden solo cuando de verdad
+     se usan (importar/exportar Excel, o sincronización en la nube), para que el resto de
+     la app funcione completo sin necesitar internet. Ver ensureXLSX() y ensureFirebaseSDK(). -->
 <style>
   :root{
     --bg:#eef1f4;
@@ -1182,6 +1179,41 @@ const CLOUD_BLOB_KEYS = ['bm160-config','bm160-turnos','bm160-codigos','bm160-de
 let CLOUD_ENABLED = false;
 let fbDb = null;
 
+let XLSX_LOADING_PROMISE = null;
+function ensureXLSX(){
+  if(window.XLSX) return Promise.resolve();
+  if(XLSX_LOADING_PROMISE) return XLSX_LOADING_PROMISE;
+  toast('Cargando la función de Excel (necesita internet un momento)…');
+  XLSX_LOADING_PROMISE = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = ()=>resolve();
+    s.onerror = ()=>{ XLSX_LOADING_PROMISE = null; reject(new Error('No se pudo cargar la función de Excel — necesitas internet para importar/exportar archivos .xlsx (los .dat del checador sí funcionan sin internet).')); };
+    document.head.appendChild(s);
+  });
+  return XLSX_LOADING_PROMISE;
+}
+let FIREBASE_LOADING_PROMISE = null;
+function ensureFirebaseSDK(){
+  if(window.firebase) return Promise.resolve();
+  if(FIREBASE_LOADING_PROMISE) return FIREBASE_LOADING_PROMISE;
+  const urls = [
+    'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js'
+  ];
+  const cargarUno = (src)=> new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = ()=>reject(new Error('No se pudo conectar con Firebase — necesitas internet para la sincronización en la nube.'));
+    document.head.appendChild(s);
+  });
+  FIREBASE_LOADING_PROMISE = (async ()=>{
+    for(const url of urls) await cargarUno(url);
+  })().catch(e=>{ FIREBASE_LOADING_PROMISE = null; throw e; });
+  return FIREBASE_LOADING_PROMISE;
+}
 function setCloudStatus(msg, ok){
   const el = document.getElementById('cloudStatus');
   if(!el) return;
@@ -1352,6 +1384,7 @@ async function cloudMergeOnConnect(){
 }
 async function connectFirebase(cfg, isNewConnection){
   try{
+    await ensureFirebaseSDK();
     if(firebase.apps && firebase.apps.length){ await firebase.app().delete(); }
     firebase.initializeApp(cfg);
     fbDb = firebase.firestore();
@@ -1377,6 +1410,7 @@ async function enableCloudWriteOnly(){
   const raw = localStorage.getItem(LS_PREFIX+'firebaseConfig');
   if(!raw) return;
   try{
+    await ensureFirebaseSDK();
     const cfg = JSON.parse(raw);
     if(firebase.apps && firebase.apps.length){ await firebase.app().delete(); }
     firebase.initializeApp(cfg);
@@ -1572,12 +1606,13 @@ document.getElementById('fileInput').addEventListener('change', (e)=>{
   const nameLower = file.name.toLowerCase();
   const isRaw = nameLower.endsWith('.dat') || nameLower.endsWith('.txt');
   const reader = new FileReader();
-  reader.onload = (evt)=>{
+  reader.onload = async (evt)=>{
     try{
       if(isRaw){
         parseRawAttlog(evt.target.result);
         return;
       }
+      try{ await ensureXLSX(); }catch(e){ toast(e.message); return; }
       let workbook;
       if(nameLower.endsWith('.csv')){
         workbook = XLSX.read(evt.target.result, {type:'string', cellDates:true});
@@ -2876,7 +2911,8 @@ function reportRowsForExcel(rep){
 function safeSheetName(name){
   return (name || 'Hoja').replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31) || 'Hoja';
 }
-document.getElementById('btnExportReport').addEventListener('click', ()=>{
+document.getElementById('btnExportReport').addEventListener('click', async ()=>{
+  try{ await ensureXLSX(); }catch(e){ toast(e.message); return; }
   if(window._lastReportAll){
     const all = window._lastReportAll;
     const wb = XLSX.utils.book_new();
@@ -3059,7 +3095,8 @@ document.getElementById('btnGenFR').addEventListener('click', ()=>{
   document.getElementById('btnExportFR').disabled = !rows.length;
   document.getElementById('btnPrintFR').disabled = !rows.length;
 });
-document.getElementById('btnExportFR').addEventListener('click', ()=>{
+document.getElementById('btnExportFR').addEventListener('click', async ()=>{
+  try{ await ensureXLSX(); }catch(e){ toast(e.message); return; }
   const rep = window._lastFR; if(!rep || !rep.rows.length) return;
   const dayNames = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const data = rep.rows.map(r=>({ Empleado:r.nombre, 'No.':r.id, Fecha:r.fecha, Dia:dayNames[r.dow], Tipo:r.tipo, Detalle:r.detalle }));
