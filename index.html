@@ -826,6 +826,12 @@
           <input type="number" id="calcBonoProduccion" step="0.01" placeholder="Ej. 700">
         </div>
         <div class="field">
+          <label>¿Quieres que le lleguen $X y ese bono SÍ se grava?</label>
+          <input type="number" id="calcBonoGravadoDeseado" step="0.01" placeholder="Ej. 700 (te calculo el bruto)">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
           <label>Días de aguinaldo (para el IMSS)</label>
           <input type="number" id="calcDiasAguinaldo" value="15" step="0.5">
         </div>
@@ -3416,6 +3422,28 @@ function calcularSubsidio(gravable, periodo){
   if(gravable > limite) return 0;
   return SUBSIDIO_EMPLEO_MENSUAL/30.4*dias;
 }
+function calcularISRNeto(gravable, periodo){
+  const { isr } = calcularISR(gravable, periodo);
+  const subsidio = calcularSubsidio(gravable, periodo);
+  return Math.max(0, isr - subsidio);
+}
+function calcularBrutoParaNeto(netoDeseado, gravableBase, periodo){
+  // Busca, por aproximaciones sucesivas, cuánto bruto hay que agregar para que,
+  // después del ISR adicional que provoca (el ISR es progresivo, no es un % fijo),
+  // el trabajador reciba exactamente "netoDeseado" de más.
+  const isrBase = calcularISRNeto(gravableBase, periodo);
+  let lo = 0, hi = netoDeseado*2.5 + 2000;
+  for(let i=0; i<60; i++){
+    const mid = (lo+hi)/2;
+    const isrConBono = calcularISRNeto(gravableBase+mid, periodo);
+    const netoObtenido = mid - (isrConBono - isrBase);
+    if(netoObtenido < netoDeseado) lo = mid; else hi = mid;
+  }
+  const bruto = (lo+hi)/2;
+  const isrConBono = calcularISRNeto(gravableBase+bruto, periodo);
+  const isrAdicional = isrConBono - isrBase;
+  return { bruto, isrAdicional };
+}
 function calcularIMSSObrera(sbcPeriodo, periodo){
   const dias = DIAS_PERIODO_CALC[periodo];
   const tresUMA = UMA_DIARIA_2026*3*dias;
@@ -3475,6 +3503,7 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   const bonoPct = +document.getElementById('calcBonoPct').value || 0;
   const sinBono = document.getElementById('calcSinBono').value === 'si';
   const bonoProduccion = +document.getElementById('calcBonoProduccion').value || 0;
+  const bonoGravadoDeseado = +document.getElementById('calcBonoGravadoDeseado').value || 0;
   const diasAguinaldo = +document.getElementById('calcDiasAguinaldo').value || 15;
   const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
   const horasNormales = +document.getElementById('calcHorasNormales').value || (DIAS_PERIODO_CALC[periodo]*8);
@@ -3504,6 +3533,11 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
 
   const netoSinProduccion = gravable - isrFinal - imss.total;
   const netoFinal = netoSinProduccion + bonoProduccion;
+
+  let brutoInfo = null;
+  if(bonoGravadoDeseado > 0){
+    brutoInfo = calcularBrutoParaNeto(bonoGravadoDeseado, gravable, periodo);
+  }
 
   const periodoTxt = {semanal:'semana', quincenal:'quincena', mensual:'mes'}[periodo];
 
@@ -3552,6 +3586,20 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
           <div class="l">NETO TOTAL A PAGAR (para capturar en tu sistema)</div>
         </div>
       </div>
+
+      ${brutoInfo ? `
+      <h3 style="margin-top:22px;">5. Bono gravado — cálculo del bruto</h3>
+      <p class="sub" style="margin-top:-4px;">Para que a este empleado le lleguen exactamente <b>${fmtMoney(bonoGravadoDeseado)}</b> netos de este bono (sí sujeto a ISR), tienes que capturarlo así:</p>
+      <table>
+        <tr><td>ISR adicional que provoca este bono</td><td class="mono">${fmtMoney(brutoInfo.isrAdicional)}</td></tr>
+        <tr><td>Neto que efectivamente recibe</td><td class="mono">${fmtMoney(bonoGravadoDeseado)}</td></tr>
+      </table>
+      <div class="stat" style="margin-top:14px; max-width:320px; border-color:#c2780c;">
+        <div class="n" style="color:#c2780c;">${fmtMoney(brutoInfo.bruto)}</div>
+        <div class="l">BONO BRUTO a capturar en tu sistema (para que le lleguen ${fmtMoney(bonoGravadoDeseado)})</div>
+      </div>
+      <p class="sub" style="margin-top:10px;">⚠️ Este cálculo solo considera el ISR adicional. Si tu sistema también le carga IMSS a este bono específico (depende de cómo lo tengas configurado), el bruto necesario sería un poco más alto.</p>` : ''}
+
       <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia con tablas 2026. No sustituye a tu contador — confirma la UMA vigente y las tablas oficiales antes de usarlo para pagos reales.</p>
     </div>
   `;
