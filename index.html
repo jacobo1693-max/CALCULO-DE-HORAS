@@ -2609,6 +2609,41 @@ function refreshAllEmployeeSelects(){
 }
 
 /* ---------- resumen por periodo ---------- */
+function baseSemanalBono(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp) return 0;
+  if(emp.sueldoSemanal) return +emp.sueldoSemanal;
+  const sueldoHora = getSueldoHora(id);
+  if(!sueldoHora) return 0;
+  const horas = emp.horasSemana ? +emp.horasSemana : 48;
+  return sueldoHora * horas;
+}
+function computeBonoPuntualidadDetalle(id, from, to){
+  const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
+  const baseSemana = baseSemanalBono(id);
+  if(!baseSemana) return { bono:0, semanas:0, semanasConBono:0, baseSemana:0, bonoPct };
+
+  const dias = dateRange(from, to);
+  const semanasMap = {};
+  dias.forEach(fecha=>{
+    const wk = mondayWeekRange(fecha);
+    if(!semanasMap[wk.from]) semanasMap[wk.from] = { from: wk.from, to: wk.to, sinIncidencia: true, tieneDiaLaborable:false };
+    const sched = getScheduleFor(id, fecha);
+    if(sched.activo){
+      semanasMap[wk.from].tieneDiaLaborable = true;
+      const info = computeDay(id, fecha);
+      if(info.punches.length===0) semanasMap[wk.from].sinIncidencia = false;
+      else if(isLate(id, info.punches, fecha)) semanasMap[wk.from].sinIncidencia = false;
+    }
+  });
+  let bono = 0, semanas = 0, semanasConBono = 0;
+  Object.values(semanasMap).forEach(s=>{
+    if(!s.tieneDiaLaborable) return;
+    semanas++;
+    if(s.sinIncidencia){ bono += baseSemana*bonoPct; semanasConBono++; }
+  });
+  return { bono, semanas, semanasConBono, baseSemana, bonoPct };
+}
 function computeEmployeePeriod(id, from, to){
   const days = dateRange(from, to);
   let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pagoNormal=0, pagoExtra=0;
@@ -2628,10 +2663,11 @@ function computeEmployeePeriod(id, from, to){
   });
   const sueldoHora = getSueldoHora(id);
   const puntual = laborables>0 && faltas===0 && retardos===0;
-  const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
-  const bono = puntual ? pagoNormal*bonoPct : 0;
+  const bonoInfo = computeBonoPuntualidadDetalle(id, from, to);
+  const bono = bonoInfo.bono;
+  const bonoPct = bonoInfo.bonoPct;
   const pago = pagoNormal + pagoExtra + bono;
-  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pagoNormal, pagoExtra, bono, puntual, bonoPct, pago };
+  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pagoNormal, pagoExtra, bono, puntual, bonoPct, bonoInfo, pago };
 }
 document.getElementById('btnQuickWeek').addEventListener('click', ()=>{
   const d = new Date(); const dow = d.getDay();
@@ -2659,8 +2695,8 @@ document.getElementById('btnLoadWeek').addEventListener('click', ()=>{
     const r = computeEmployeePeriod(id, from, to);
     if(r.sueldoHora) anySueldo = true;
     grandTotalPago += r.pago;
-    const bonoCell = r.puntual
-      ? (r.sueldoHora ? `<span class="tag ok">${fmtMoney(r.bono)}</span>` : `<span class="tag ok">Puntual</span>`)
+    const bonoCell = r.bonoInfo.baseSemana
+      ? `<span class="tag ${r.bono>0?'ok':'neutral'}">${fmtMoney(r.bono)}</span>`
       : '—';
     html += `<tr>
       <td><b>${employeeDisplayName(id)}</b></td>
@@ -2767,10 +2803,11 @@ function computeReportData(id, from, to){
   });
   const laborables = rows.filter(r=>r.laborable).length;
   const puntual = laborables>0 && faltas===0 && retardos===0;
-  const bonoPct = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7)/100;
-  const bono = puntual ? totalPagoNormal*bonoPct : 0;
+  const bonoInfo = computeBonoPuntualidadDetalle(id, from, to);
+  const bono = bonoInfo.bono;
+  const bonoPct = bonoInfo.bonoPct;
   const totalPago = totalPagoNormal + totalPagoExtra + bono;
-  return { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct };
+  return { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct, bonoInfo };
 }
 function reportStatsHtml(rep){
   let html = `
@@ -2780,7 +2817,7 @@ function reportStatsHtml(rep){
       <div class="stat"><div class="n">${rep.retardos}</div><div class="l">Retardos</div></div>
       <div class="stat"><div class="n">${rep.faltas}</div><div class="l">Faltas</div></div>
       <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
-      <div class="stat"><div class="n">${rep.puntual ? fmtMoney(rep.bono) : 'No aplica'}</div><div class="l">Bono de puntualidad (${Math.round(rep.bonoPct*100)}%)</div></div>
+      <div class="stat"><div class="n">${rep.bonoInfo.baseSemana ? fmtMoney(rep.bono) : 'No aplica'}</div><div class="l">Bono de puntualidad (${Math.round(rep.bonoPct*100)}% · ${rep.bonoInfo.semanasConBono} de ${rep.bonoInfo.semanas} semana${rep.bonoInfo.semanas===1?'':'s'})</div></div>
       <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.totalPago) : '—'}</div><div class="l">Pago total del periodo</div></div>
     </div>`;
   if(!rep.sueldoHora){
@@ -2856,7 +2893,7 @@ function generateAllEmployeesReport(from, to){
   all.forEach((d,idx)=>{
     if(d.sueldoHora) anySueldo = true;
     grand += d.totalPago;
-    const bonoCell = d.puntual ? (d.sueldoHora ? fmtMoney(d.bono) : 'Puntual') : '—';
+    const bonoCell = d.bonoInfo.baseSemana ? fmtMoney(d.bono) : '—';
     html += `<tr class="clickable" onclick="toggleDailyBreakdown(${idx})">
       <td><span id="drIcon${idx}">▸</span></td>
       <td><b>${d.nombre}</b></td><td class="mono">${d.id}</td>
@@ -2904,7 +2941,7 @@ function reportRowsForExcel(rep){
     Estado: r.label
   }));
   data.push({});
-  data.push({ Fecha:'Bono puntualidad', 'Pago del día': rep.puntual ? rep.bono : 0, Estado: rep.puntual ? `Cumplió puntualidad (${Math.round(rep.bonoPct*100)}%)` : 'No aplica (tuvo falta o retardo)' });
+  data.push({ Fecha:'Bono puntualidad', 'Pago del día': rep.bono, Estado: `${rep.bonoInfo.semanasConBono} de ${rep.bonoInfo.semanas} semana(s) con bono (${Math.round(rep.bonoPct*100)}% sobre $${rep.bonoInfo.baseSemana.toFixed(2)}/semana)` });
   data.push({ Fecha:'TOTAL', 'Pago del día': rep.sueldoHora ? rep.totalPago : '', Estado: `Retardos: ${rep.retardos} · Faltas: ${rep.faltas} · Sueldo/hora: ${rep.sueldoHora || '—'}` });
   return data;
 }
@@ -4185,7 +4222,7 @@ function computeDashboardData(from, to){
   const totalPago = perEmployee.reduce((s,e)=>s+(e.sueldoHora?e.pago:0),0);
   const anySueldoGlobal = perEmployee.some(e=>e.sueldoHora>0);
   const tasaAsistencia = totalLaborables>0 ? ((totalLaborables-totalFaltas)/totalLaborables*100) : null;
-  const empleadosConBono = perEmployee.filter(e=>e.puntual).length;
+  const empleadosConBono = perEmployee.filter(e=>e.bono>0).length;
 
   return { perEmployee, deptoList, totalHoras, totalExtra, totalRetardos, totalFaltas, totalLaborables, totalPago, anySueldoGlobal, tasaAsistencia, empleadosConBono, totalEmpleados: perEmployee.length };
 }
