@@ -517,6 +517,10 @@
           <label>Sueldo por hora</label>
           <input type="number" id="empSueldo" placeholder="Ej. 45.50" min="0" step="0.01">
         </div>
+        <div class="field">
+          <label>Sueldo diario (para la calculadora ISR/IMSS)</label>
+          <input type="number" id="empSueldoDiario" placeholder="Ej. 565.88" min="0" step="0.01">
+        </div>
       </div>
       <p class="sub" style="margin-top:-6px;">Si llenas "Horas por semana" y "Sueldo semanal", el sueldo por hora se calcula solo (sueldo semanal ÷ horas por semana). También puedes ignorar esos dos y escribir el sueldo por hora directamente.</p>
       <div class="row" style="margin-top:14px;">
@@ -788,6 +792,17 @@
           </select>
         </div>
       </div>
+      <div class="row">
+        <div class="field">
+          <label>Horas normales del periodo</label>
+          <input type="number" id="calcHorasNormales" step="0.5" placeholder="Se llena solo según el periodo">
+        </div>
+        <div class="field">
+          <label>Horas realmente trabajadas</label>
+          <input type="number" id="calcHorasTrabajadas" step="0.5" placeholder="Vacío = trabajó completo">
+        </div>
+      </div>
+      <p class="sub" style="margin-top:-6px;">Si faltó con permiso y trabajó menos horas, captúralas aquí — el sueldo se paga proporcional a esas horas, pero el bono de puntualidad se calcula completo (igual que en Microsip), siempre que no hayas marcado que perdió el bono.</p>
       <div class="row">
         <div class="field">
           <label>Bono de producción (neto, no se grava)</label>
@@ -1966,6 +1981,7 @@ function resetEmployeeForm(){
   document.getElementById('empHorasSemana').value='';
   document.getElementById('empSueldoSemanal').value='';
   document.getElementById('empSueldo').value='';
+  document.getElementById('empSueldoDiario').value='';
   document.getElementById('empBonoAnual').value='';
   document.getElementById('empBonoTope').value='48';
   document.getElementById('empTurno').value='';
@@ -1999,6 +2015,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     depto: document.getElementById('empDepto').value.trim(),
     puesto: document.getElementById('empPuesto').value.trim(),
     sueldoHora: +document.getElementById('empSueldo').value || 0,
+    sueldoDiario: +document.getElementById('empSueldoDiario').value || null,
     horasSemana: +document.getElementById('empHorasSemana').value || null,
     sueldoSemanal: +document.getElementById('empSueldoSemanal').value || null,
     bonoAnualPct: document.getElementById('empBonoAnual').value ? +document.getElementById('empBonoAnual').value : null,
@@ -2058,6 +2075,7 @@ function editEmployee(id){
   document.getElementById('empHorasSemana').value = emp.horasSemana || '';
   document.getElementById('empSueldoSemanal').value = emp.sueldoSemanal || '';
   document.getElementById('empSueldo').value = emp.sueldoHora || '';
+  document.getElementById('empSueldoDiario').value = emp.sueldoDiario || '';
   document.getElementById('empBonoAnual').value = (emp.bonoAnualPct!=null) ? emp.bonoAnualPct : '';
   document.getElementById('empBonoTope').value = emp.bonoAnualTopeHoras || 48;
   document.getElementById('empTurno').value = emp.turnoId || '';
@@ -3415,13 +3433,22 @@ document.getElementById('calcEmpleado').addEventListener('change', ()=>{
   if(!id) return;
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(!emp) return;
-  if(emp.sueldoHora){
-    // estimamos el sueldo diario con 8 horas si no hay otro dato mejor
+  if(emp.sueldoDiario){
+    document.getElementById('calcSueldoDiario').value = (+emp.sueldoDiario).toFixed(2);
+  } else if(emp.sueldoSemanal){
+    document.getElementById('calcSueldoDiario').value = (emp.sueldoSemanal/7).toFixed(2);
+  } else if(emp.sueldoHora){
     const horasDia = emp.horasSemana ? emp.horasSemana/6 : 8;
     document.getElementById('calcSueldoDiario').value = (emp.sueldoHora*horasDia).toFixed(2);
   }
   if(emp.bonoAnualPct) document.getElementById('calcBonoPct').value = emp.bonoAnualPct;
 });
+document.getElementById('calcPeriodo').addEventListener('change', ()=>{
+  const periodo = document.getElementById('calcPeriodo').value;
+  const dias = DIAS_PERIODO_CALC[periodo];
+  document.getElementById('calcHorasNormales').value = (dias*8).toFixed(1);
+});
+document.getElementById('calcPeriodo').dispatchEvent(new Event('change'));
 document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   const id = document.getElementById('calcEmpleado').value;
   const periodo = document.getElementById('calcPeriodo').value;
@@ -3431,14 +3458,21 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   const bonoProduccion = +document.getElementById('calcBonoProduccion').value || 0;
   const diasAguinaldo = +document.getElementById('calcDiasAguinaldo').value || 15;
   const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
+  const horasNormales = +document.getElementById('calcHorasNormales').value || (DIAS_PERIODO_CALC[periodo]*8);
+  const horasTrabajadasInput = document.getElementById('calcHorasTrabajadas').value;
   const area = document.getElementById('calcResultadoArea');
 
   if(!sueldoDiario){ toast('Captura el sueldo diario.'); area.innerHTML=''; return; }
 
   const dias = DIAS_PERIODO_CALC[periodo];
-  const sueldoPeriodo = sueldoDiario * dias;
-  const bono = sinBono ? 0 : sueldoPeriodo*(bonoPct/100);
-  const gravable = sueldoPeriodo + bono;
+  const sueldoPeriodoCompleto = sueldoDiario * dias; // base del periodo completo, aquí SIEMPRE se calcula el bono
+  const sueldoPorHora = horasNormales>0 ? sueldoPeriodoCompleto/horasNormales : 0;
+  const trabajoCompleto = horasTrabajadasInput==='' || +horasTrabajadasInput>=horasNormales;
+  const horasTrabajadas = trabajoCompleto ? horasNormales : +horasTrabajadasInput;
+  const sueldoAPagar = trabajoCompleto ? sueldoPeriodoCompleto : horasTrabajadas*sueldoPorHora;
+
+  const bono = sinBono ? 0 : sueldoPeriodoCompleto*(bonoPct/100);
+  const gravable = sueldoAPagar + bono;
 
   const { isr, rango, excedente } = calcularISR(gravable, periodo);
   const subsidio = calcularSubsidio(gravable, periodo);
@@ -3458,8 +3492,8 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
     <div class="form-card">
       <h3 style="margin-top:0;">1. Percepciones de la ${periodoTxt}</h3>
       <table>
-        <tr><td>Sueldo (${dias} días)</td><td class="mono">${fmtMoney(sueldoPeriodo)}</td></tr>
-        <tr><td>Bono de puntualidad (${bonoPct}%)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
+        <tr><td>Sueldo${trabajoCompleto ? ` (${dias} días completos)` : ` (proporcional a ${horasTrabajadas} de ${horasNormales} horas)`}</td><td class="mono">${fmtMoney(sueldoAPagar)}</td></tr>
+        <tr><td>Bono de puntualidad (${bonoPct}%, sobre la semana completa)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
         <tr><td><b>Total gravable</b></td><td class="mono"><b>${fmtMoney(gravable)}</b></td></tr>
       </table>
 
@@ -3486,14 +3520,18 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
 
       <h3>4. Neto a pagar</h3>
       <table>
-        <tr><td>Percepciones gravables</td><td class="mono">${fmtMoney(gravable)}</td></tr>
-        <tr><td>− ISR</td><td class="mono">−${fmtMoney(isrFinal)}</td></tr>
-        <tr><td>− IMSS</td><td class="mono">−${fmtMoney(imss.total)}</td></tr>
-        <tr><td>+ Bono de producción (neto)</td><td class="mono">${fmtMoney(bonoProduccion)}</td></tr>
+        <tr><td>Sueldo + bono de puntualidad, ya con ISR e IMSS descontados</td><td class="mono">${fmtMoney(netoSinProduccion)}</td></tr>
+        <tr><td>+ Bono de producción (neto, sin descuentos)</td><td class="mono">${fmtMoney(bonoProduccion)}</td></tr>
       </table>
-      <div class="stat" style="margin-top:14px; max-width:320px;">
-        <div class="n" style="color:#0b6e4f;">${fmtMoney(netoFinal)}</div>
-        <div class="l">NETO A PAGAR (para capturar en tu sistema)</div>
+      <div class="row" style="margin-top:14px; gap:16px;">
+        ${bonoProduccion>0 ? `<div class="stat" style="max-width:280px;">
+          <div class="n" style="color:#13233b;">${fmtMoney(bonoProduccion)}</div>
+          <div class="l">BONO DE PRODUCCIÓN a capturar (tal cual, sin cambios)</div>
+        </div>` : ''}
+        <div class="stat" style="max-width:320px;">
+          <div class="n" style="color:#0b6e4f;">${fmtMoney(netoFinal)}</div>
+          <div class="l">NETO TOTAL A PAGAR (para capturar en tu sistema)</div>
+        </div>
       </div>
       <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia con tablas 2026. No sustituye a tu contador — confirma la UMA vigente y las tablas oficiales antes de usarlo para pagos reales.</p>
     </div>
