@@ -625,6 +625,23 @@
       </div>
     </div>
 
+    <div class="form-card" style="margin-top:16px;">
+      <label style="display:block; margin-bottom:8px;"><b>Periodo para la Hoja de Vida</b> (bono de puntualidad y horas trabajadas)</label>
+      <div class="row">
+        <div class="field">
+          <label>Desde</label>
+          <input type="date" id="hvDesde">
+        </div>
+        <div class="field">
+          <label>Hasta</label>
+          <input type="date" id="hvHasta">
+        </div>
+        <button class="btn secondary" id="btnHvAnioActual">Todo el año actual</button>
+        <button class="btn secondary" id="btnHvMesActual">Solo este mes</button>
+      </div>
+      <p class="sub" style="margin-top:8px;">Elige el rango antes de darle clic a "Hoja de vida" en cualquier empleado de la tabla de abajo — ese rango es el que va a usar.</p>
+    </div>
+
     <div id="employeesTableArea"></div>
   </section>
 
@@ -1592,6 +1609,8 @@ async function loadLocalIntoMemory(){
   refreshAllEmployeeSelects();
   const now = new Date();
   document.getElementById('calMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
+  if(!document.getElementById('hvDesde').value) document.getElementById('hvDesde').value = `${now.getFullYear()}-01-01`;
+  if(!document.getElementById('hvHasta').value) document.getElementById('hvHasta').value = isoDate(now);
   renderDashboard();
 }
 async function loadStorage(){
@@ -3635,19 +3654,19 @@ document.getElementById('btnAddVacacion').addEventListener('click', ()=>{
   renderVacacionesResumen();
   toast('Días de vacaciones registrados.');
 });
-function computeHorasTopadasAnuales(id, anio, tope){
-  const inicioAnio = new Date(anio, 0, 1);
-  const finAnio = new Date(anio, 11, 31);
-  let cursor = new Date(inicioAnio);
+function computeHorasTopadasPeriodo(id, from, to, tope){
+  const inicio = new Date(from+'T00:00:00');
+  const fin = new Date(to+'T00:00:00');
+  let cursor = new Date(inicio);
   const dow0 = cursor.getDay();
   cursor.setDate(cursor.getDate() + ((dow0===0) ? -6 : 1-dow0)); // arrancar en el lunes de esa semana
 
   let totalHorasReales = 0, totalHorasTopadas = 0, semanas = 0;
-  let cursorFin = new Date();
-  while(cursor <= finAnio && cursor <= cursorFin){
+  const hoy = new Date();
+  while(cursor <= fin && cursor <= hoy){
     const finSemana = new Date(cursor); finSemana.setDate(cursor.getDate()+6);
-    const from = isoDate(cursor), to = isoDate(finSemana);
-    const r = computeEmployeePeriod(id, from, to);
+    const semFrom = isoDate(cursor), semTo = isoDate(finSemana);
+    const r = computeEmployeePeriod(id, semFrom, semTo);
     const horasSemana = r.totalMins/60;
     if(horasSemana > 0){
       totalHorasReales += horasSemana;
@@ -3658,24 +3677,24 @@ function computeHorasTopadasAnuales(id, anio, tope){
   }
   return { totalHorasReales, totalHorasTopadas, semanas, tope };
 }
-function computeBonoAnualAcumulado(id, anio){
+function computeBonoAcumuladoPeriodo(id, from, to){
   const emp = EMPLOYEES.find(e=>e.id===id);
   const pct = (emp && emp.bonoAnualPct!=null) ? +emp.bonoAnualPct : null;
   const sueldoHora = getSueldoHora(id);
   const TOPE_HORAS_SEMANA = (emp && emp.bonoAnualTopeHoras) ? +emp.bonoAnualTopeHoras : 48;
   if(!pct || !sueldoHora) return { pct, totalBono: 0, semanas: 0, aplica: false };
 
-  const inicioAnio = new Date(anio, 0, 1);
-  const finAnio = new Date(anio, 11, 31);
-  let cursor = new Date(inicioAnio);
+  const inicio = new Date(from+'T00:00:00');
+  const fin = new Date(to+'T00:00:00');
+  let cursor = new Date(inicio);
   const dow0 = cursor.getDay();
   cursor.setDate(cursor.getDate() + ((dow0===0) ? -6 : 1-dow0)); // arrancar en el lunes de esa semana
 
   let totalBono = 0, semanas = 0;
-  while(cursor <= finAnio){
+  while(cursor <= fin){
     const finSemana = new Date(cursor); finSemana.setDate(cursor.getDate()+6);
-    const from = isoDate(cursor), to = isoDate(finSemana);
-    const r = computeEmployeePeriod(id, from, to);
+    const semFrom = isoDate(cursor), semTo = isoDate(finSemana);
+    const r = computeEmployeePeriod(id, semFrom, semTo);
     const horasSemana = r.totalMins/60;
     if(horasSemana > 0){
       const horasTope = Math.min(horasSemana, TOPE_HORAS_SEMANA);
@@ -3860,7 +3879,7 @@ function printActaAbandono(id, fecha){
   document.getElementById('printArea').innerHTML = actaAbandonoHtml(id, fecha);
   window.print();
 }
-function hojaDeVidaHtml(id){
+function hojaDeVidaHtml(id, rangoFrom, rangoTo){
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(!emp) return '<p>Empleado no encontrado.</p>';
   const nombre = emp.nombre;
@@ -3870,10 +3889,13 @@ function hojaDeVidaHtml(id){
 
   const hoy = new Date();
   const inicioAnio = isoDate(new Date(hoy.getFullYear(),0,1));
-  const finRango = isoDate(hoy);
-  const resumen = computeEmployeePeriod(id, inicioAnio, finRango);
-  const horasTopadas = computeHorasTopadasAnuales(id, hoy.getFullYear(), 48);
-  const bonoAnual = computeBonoAnualAcumulado(id, hoy.getFullYear());
+  const finHoy = isoDate(hoy);
+  const from = rangoFrom || inicioAnio;
+  const to = rangoTo || finHoy;
+  const rangoPersonalizado = !!(rangoFrom || rangoTo);
+  const resumen = computeEmployeePeriod(id, from, to);
+  const horasTopadas = computeHorasTopadasPeriodo(id, from, to, 48);
+  const bonoAnual = computeBonoAcumuladoPeriodo(id, from, to);
   const vac = computeVacacionesEmpleado(id);
 
   const fotoHtml = emp.foto
@@ -3952,7 +3974,7 @@ function hojaDeVidaHtml(id){
       ${contratoBlock}
       ${bajaBlock}
 
-      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Resumen de asistencia (${hoy.getFullYear()})</h3>
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Resumen de asistencia (${from} al ${to})</h3>
       <table style="width:100%; border-collapse:collapse; font-size:11pt;">
         ${fila('Horas realmente checadas', fmtHM(resumen.totalMins))}
         ${fila('Horas acumuladas (tope de 48h/semana)', horasTopadas.totalHorasTopadas.toFixed(1)+' h')}
@@ -3962,7 +3984,7 @@ function hojaDeVidaHtml(id){
       </table>
 
       ${bonoAnual.aplica ? `
-      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Bono anual por asistencia</h3>
+      <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Bono de puntualidad (${from} al ${to})</h3>
       <table style="width:100%; border-collapse:collapse; font-size:11pt;">
         ${fila('Porcentaje asignado', bonoAnual.pct+'%')}
         ${fila('Semanas acumuladas', bonoAnual.semanas)}
@@ -3987,9 +4009,23 @@ function hojaDeVidaHtml(id){
   `;
 }
 function printHojaDeVida(id){
-  document.getElementById('printArea').innerHTML = hojaDeVidaHtml(id);
+  const from = document.getElementById('hvDesde').value || null;
+  const to = document.getElementById('hvHasta').value || null;
+  document.getElementById('printArea').innerHTML = hojaDeVidaHtml(id, from, to);
   window.print();
 }
+document.getElementById('btnHvAnioActual').addEventListener('click', ()=>{
+  const hoy = new Date();
+  document.getElementById('hvDesde').value = `${hoy.getFullYear()}-01-01`;
+  document.getElementById('hvHasta').value = isoDate(hoy);
+  toast('Periodo puesto en todo el año actual.');
+});
+document.getElementById('btnHvMesActual').addEventListener('click', ()=>{
+  const hoy = new Date();
+  document.getElementById('hvDesde').value = `${hoy.getFullYear()}-${pad(hoy.getMonth()+1)}-01`;
+  document.getElementById('hvHasta').value = isoDate(hoy);
+  toast('Periodo puesto en el mes actual.');
+});
 /* ---------- número a letras (para el sueldo diario en los contratos) ---------- */
 const NAL_UNIDADES = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
 const NAL_DIEZ_A_DIECINUEVE = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve'];
