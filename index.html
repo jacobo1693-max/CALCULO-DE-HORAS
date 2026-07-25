@@ -3635,6 +3635,29 @@ document.getElementById('btnAddVacacion').addEventListener('click', ()=>{
   renderVacacionesResumen();
   toast('Días de vacaciones registrados.');
 });
+function computeHorasTopadasAnuales(id, anio, tope){
+  const inicioAnio = new Date(anio, 0, 1);
+  const finAnio = new Date(anio, 11, 31);
+  let cursor = new Date(inicioAnio);
+  const dow0 = cursor.getDay();
+  cursor.setDate(cursor.getDate() + ((dow0===0) ? -6 : 1-dow0)); // arrancar en el lunes de esa semana
+
+  let totalHorasReales = 0, totalHorasTopadas = 0, semanas = 0;
+  let cursorFin = new Date();
+  while(cursor <= finAnio && cursor <= cursorFin){
+    const finSemana = new Date(cursor); finSemana.setDate(cursor.getDate()+6);
+    const from = isoDate(cursor), to = isoDate(finSemana);
+    const r = computeEmployeePeriod(id, from, to);
+    const horasSemana = r.totalMins/60;
+    if(horasSemana > 0){
+      totalHorasReales += horasSemana;
+      totalHorasTopadas += Math.min(horasSemana, tope);
+      semanas++;
+    }
+    cursor.setDate(cursor.getDate()+7);
+  }
+  return { totalHorasReales, totalHorasTopadas, semanas, tope };
+}
 function computeBonoAnualAcumulado(id, anio){
   const emp = EMPLOYEES.find(e=>e.id===id);
   const pct = (emp && emp.bonoAnualPct!=null) ? +emp.bonoAnualPct : null;
@@ -3849,6 +3872,7 @@ function hojaDeVidaHtml(id){
   const inicioAnio = isoDate(new Date(hoy.getFullYear(),0,1));
   const finRango = isoDate(hoy);
   const resumen = computeEmployeePeriod(id, inicioAnio, finRango);
+  const horasTopadas = computeHorasTopadasAnuales(id, hoy.getFullYear(), 48);
   const bonoAnual = computeBonoAnualAcumulado(id, hoy.getFullYear());
   const vac = computeVacacionesEmpleado(id);
 
@@ -3930,7 +3954,8 @@ function hojaDeVidaHtml(id){
 
       <h3 style="margin-top:18px; font-family:Arial; font-size:13pt; color:#13233b;">Resumen de asistencia (${hoy.getFullYear()})</h3>
       <table style="width:100%; border-collapse:collapse; font-size:11pt;">
-        ${fila('Horas trabajadas', fmtHM(resumen.totalMins))}
+        ${fila('Horas realmente checadas', fmtHM(resumen.totalMins))}
+        ${fila('Horas acumuladas (tope de 48h/semana)', horasTopadas.totalHorasTopadas.toFixed(1)+' h')}
         ${fila('Horas extra', fmtHM(resumen.extraMins))}
         ${fila('Retardos', resumen.retardos)}
         ${fila('Faltas', resumen.faltas)}
