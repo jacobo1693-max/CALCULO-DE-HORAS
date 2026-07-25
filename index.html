@@ -281,6 +281,7 @@
       <button data-tab="baja">Renuncia y finiquito</button>
       <button data-tab="bajaslista">Bajas</button>
       <button data-tab="vacaciones">Vacaciones</button>
+      <button data-tab="calcnomina">Calculadora ISR/IMSS</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -748,6 +749,65 @@
       </div>
       <div id="vacHistorialArea" style="margin-top:14px;"></div>
     </div>
+  </section>
+
+  <!-- CALCULADORA ISR/IMSS -->
+  <section class="panel" id="panel-calcnomina">
+    <h2>Calculadora de ISR e IMSS</h2>
+    <p class="sub">Herramienta de referencia para estimar el neto a pagar (para capturar directo en tu sistema de nómina). Usa las tablas de ISR y las tasas de IMSS vigentes que se cargaron a esta app — <b>no sustituye a tu contador</b>; verifica siempre antes de usarlo para pagos reales.</p>
+
+    <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Empleado (opcional — jala su sueldo y antigüedad)</label>
+          <select id="calcEmpleado"><option value="">-- ninguno, capturar a mano --</option></select>
+        </div>
+        <div class="field">
+          <label>Periodo de pago</label>
+          <select id="calcPeriodo">
+            <option value="semanal">Semanal (7 días)</option>
+            <option value="quincenal">Quincenal (15 días)</option>
+            <option value="mensual">Mensual</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Sueldo diario</label>
+          <input type="number" id="calcSueldoDiario" step="0.01" placeholder="Ej. 565.88">
+        </div>
+        <div class="field">
+          <label>Bono de puntualidad (%)</label>
+          <input type="number" id="calcBonoPct" step="0.1" placeholder="Ej. 7">
+        </div>
+        <div class="field">
+          <label>¿Tuvo falta injustificada o retardo?</label>
+          <select id="calcSinBono">
+            <option value="no">No — sí tiene derecho al bono</option>
+            <option value="si">Sí — pierde el bono esta vez</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Bono de producción (neto, no se grava)</label>
+          <input type="number" id="calcBonoProduccion" step="0.01" placeholder="Ej. 700">
+        </div>
+        <div class="field">
+          <label>Días de aguinaldo (para el IMSS)</label>
+          <input type="number" id="calcDiasAguinaldo" value="15" step="0.5">
+        </div>
+        <div class="field">
+          <label>Prima vacacional (%, para el IMSS)</label>
+          <input type="number" id="calcPrimaVacacional" value="25" step="1">
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn" id="btnCalcularNomina">Calcular</button>
+      </div>
+    </div>
+
+    <div id="calcResultadoArea" style="margin-top:20px;"></div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -2606,6 +2666,7 @@ function refreshAllEmployeeSelects(){
   refreshManualEmpleadoSelect();
   refreshVacEmpleadoSelect();
   renderVacacionesResumen();
+  refreshCalcEmpleadoSelect();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -3255,6 +3316,190 @@ function antiguedadInfo(fechaContratacionStr){
   const proximoAniversario = new Date(ultimoAniversario); proximoAniversario.setFullYear(ultimoAniversario.getFullYear()+1);
   return { anios, ultimoAniversario, proximoAniversario };
 }
+/* ---------- Calculadora de ISR e IMSS (herramienta de referencia) ----------
+   Tablas cargadas para el ejercicio 2026 (Art. 96 LISR, publicadas en el Anexo 8 de la RMF).
+   IMPORTANTE: estas tablas cambian cada año — hay que actualizarlas cuando el SAT publique
+   las nuevas. Esto es una ESTIMACIÓN, no sustituye la validación de un contador. */
+const ISR_TABLAS_2026 = {
+  semanal: [
+    {inf:0.01, sup:194.46, cuota:0.00, pct:1.92},
+    {inf:194.47, sup:1650.67, cuota:3.71, pct:6.40},
+    {inf:1650.68, sup:2900.87, cuota:96.95, pct:10.88},
+    {inf:2900.88, sup:3372.11, cuota:232.96, pct:16.00},
+    {inf:3372.12, sup:4037.32, cuota:308.35, pct:17.92},
+    {inf:4037.33, sup:8142.75, cuota:427.56, pct:21.36},
+    {inf:8142.76, sup:12834.08, cuota:1304.45, pct:23.52},
+    {inf:12834.09, sup:24502.45, cuota:2407.86, pct:30.00},
+    {inf:24502.46, sup:32669.91, cuota:5908.35, pct:32.00},
+    {inf:32669.92, sup:98009.66, cuota:8521.94, pct:34.00},
+    {inf:98009.67, sup:Infinity, cuota:30737.49, pct:35.00}
+  ],
+  quincenal: [
+    {inf:0.01, sup:416.70, cuota:0.00, pct:1.92},
+    {inf:416.71, sup:3537.15, cuota:7.95, pct:6.40},
+    {inf:3537.16, sup:6216.15, cuota:207.75, pct:10.88},
+    {inf:6216.16, sup:7225.95, cuota:499.20, pct:16.00},
+    {inf:7225.96, sup:8651.40, cuota:660.75, pct:17.92},
+    {inf:8651.41, sup:17448.75, cuota:916.20, pct:21.36},
+    {inf:17448.76, sup:27501.60, cuota:2795.25, pct:23.52},
+    {inf:27501.61, sup:52505.25, cuota:5159.70, pct:30.00},
+    {inf:52505.26, sup:70006.95, cuota:12660.75, pct:32.00},
+    {inf:70006.96, sup:210020.70, cuota:18261.30, pct:34.00},
+    {inf:210020.71, sup:Infinity, cuota:65866.05, pct:35.00}
+  ],
+  mensual: [
+    {inf:0.01, sup:844.59, cuota:0.00, pct:1.92},
+    {inf:844.60, sup:7168.51, cuota:16.22, pct:6.40},
+    {inf:7168.52, sup:12598.02, cuota:420.95, pct:10.88},
+    {inf:12598.03, sup:14644.64, cuota:1011.68, pct:16.00},
+    {inf:14644.65, sup:17533.64, cuota:1339.14, pct:17.92},
+    {inf:17533.65, sup:35362.83, cuota:1856.84, pct:21.36},
+    {inf:35362.84, sup:55736.68, cuota:5665.16, pct:23.52},
+    {inf:55736.69, sup:106410.50, cuota:10457.09, pct:30.00},
+    {inf:106410.51, sup:141880.66, cuota:25659.23, pct:32.00},
+    {inf:141880.67, sup:425641.99, cuota:37009.69, pct:34.00},
+    {inf:425642.00, sup:Infinity, cuota:133488.54, pct:35.00}
+  ]
+};
+const SUBSIDIO_EMPLEO_MENSUAL = 536.22;
+const SUBSIDIO_LIMITE_MENSUAL = 11492.66;
+const UMA_DIARIA_2026 = 113.14; // ⚠ verificar cifra vigente con el SAT/INEGI antes de usar en serio
+const DIAS_PERIODO_CALC = { semanal:7, quincenal:15, mensual:30.4 };
+
+function calcularISR(gravable, periodo){
+  const tabla = ISR_TABLAS_2026[periodo];
+  const rango = tabla.find(r=>gravable>=r.inf && gravable<=r.sup) || tabla[tabla.length-1];
+  const excedente = Math.max(0, gravable - rango.inf);
+  const isr = rango.cuota + excedente*(rango.pct/100);
+  return { isr, rango, excedente };
+}
+function calcularSubsidio(gravable, periodo){
+  const dias = DIAS_PERIODO_CALC[periodo];
+  const limite = SUBSIDIO_LIMITE_MENSUAL/30.4*dias;
+  if(gravable > limite) return 0;
+  return SUBSIDIO_EMPLEO_MENSUAL/30.4*dias;
+}
+function calcularIMSSObrera(sbcPeriodo, periodo){
+  const dias = DIAS_PERIODO_CALC[periodo];
+  const tresUMA = UMA_DIARIA_2026*3*dias;
+  const pEyMExc=0.004, pPrestDinero=0.0025, pGastosMedPens=0.00375, pInvVida=0.00625, pCeyV=0.01125;
+  const excedenteEyM = Math.max(0, sbcPeriodo - tresUMA);
+  const eym = excedenteEyM*pEyMExc;
+  const prest = sbcPeriodo*pPrestDinero;
+  const gmp = sbcPeriodo*pGastosMedPens;
+  const iv = sbcPeriodo*pInvVida;
+  const ceyv = sbcPeriodo*pCeyV;
+  return { total: eym+prest+gmp+iv+ceyv, desglose:{eym,prest,gmp,iv,ceyv} };
+}
+function factorIntegracionCalc(id, diasAguinaldo, pctPrimaVacacional){
+  let diasVacaciones = 0;
+  if(id){
+    const emp = EMPLOYEES.find(e=>e.id===id);
+    if(emp && emp.fecha){
+      const info = antiguedadInfo(emp.fecha);
+      if(info && info.anios>=1) diasVacaciones = diasVacacionesLFT(info.anios);
+    }
+  }
+  return { factor: 1 + (diasAguinaldo/365) + (diasVacaciones*(pctPrimaVacacional/100)/365), diasVacaciones };
+}
+function refreshCalcEmpleadoSelect(){
+  const sel = document.getElementById('calcEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = activeEmployeeIds();
+  sel.innerHTML = '<option value="">-- ninguno, capturar a mano --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+document.getElementById('calcEmpleado').addEventListener('change', ()=>{
+  const id = document.getElementById('calcEmpleado').value;
+  if(!id) return;
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  if(!emp) return;
+  if(emp.sueldoHora){
+    // estimamos el sueldo diario con 8 horas si no hay otro dato mejor
+    const horasDia = emp.horasSemana ? emp.horasSemana/6 : 8;
+    document.getElementById('calcSueldoDiario').value = (emp.sueldoHora*horasDia).toFixed(2);
+  }
+  if(emp.bonoAnualPct) document.getElementById('calcBonoPct').value = emp.bonoAnualPct;
+});
+document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
+  const id = document.getElementById('calcEmpleado').value;
+  const periodo = document.getElementById('calcPeriodo').value;
+  const sueldoDiario = +document.getElementById('calcSueldoDiario').value || 0;
+  const bonoPct = +document.getElementById('calcBonoPct').value || 0;
+  const sinBono = document.getElementById('calcSinBono').value === 'si';
+  const bonoProduccion = +document.getElementById('calcBonoProduccion').value || 0;
+  const diasAguinaldo = +document.getElementById('calcDiasAguinaldo').value || 15;
+  const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
+  const area = document.getElementById('calcResultadoArea');
+
+  if(!sueldoDiario){ toast('Captura el sueldo diario.'); area.innerHTML=''; return; }
+
+  const dias = DIAS_PERIODO_CALC[periodo];
+  const sueldoPeriodo = sueldoDiario * dias;
+  const bono = sinBono ? 0 : sueldoPeriodo*(bonoPct/100);
+  const gravable = sueldoPeriodo + bono;
+
+  const { isr, rango, excedente } = calcularISR(gravable, periodo);
+  const subsidio = calcularSubsidio(gravable, periodo);
+  const isrFinal = Math.max(0, isr - subsidio);
+
+  const { factor, diasVacaciones } = factorIntegracionCalc(id, diasAguinaldo, pctPrimaVacacional);
+  const sbcDiario = sueldoDiario*factor;
+  const sbcPeriodo = sbcDiario*dias;
+  const imss = calcularIMSSObrera(sbcPeriodo, periodo);
+
+  const netoSinProduccion = gravable - isrFinal - imss.total;
+  const netoFinal = netoSinProduccion + bonoProduccion;
+
+  const periodoTxt = {semanal:'semana', quincenal:'quincena', mensual:'mes'}[periodo];
+
+  area.innerHTML = `
+    <div class="form-card">
+      <h3 style="margin-top:0;">1. Percepciones de la ${periodoTxt}</h3>
+      <table>
+        <tr><td>Sueldo (${dias} días)</td><td class="mono">${fmtMoney(sueldoPeriodo)}</td></tr>
+        <tr><td>Bono de puntualidad (${bonoPct}%)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
+        <tr><td><b>Total gravable</b></td><td class="mono"><b>${fmtMoney(gravable)}</b></td></tr>
+      </table>
+
+      <h3>2. ISR</h3>
+      <table>
+        <tr><td>Rango aplicable</td><td class="mono">${fmtMoney(rango.inf)} a ${rango.sup===Infinity?'en adelante':fmtMoney(rango.sup)}</td></tr>
+        <tr><td>Cuota fija</td><td class="mono">${fmtMoney(rango.cuota)}</td></tr>
+        <tr><td>Excedente × ${rango.pct}%</td><td class="mono">${fmtMoney(excedente*(rango.pct/100))}</td></tr>
+        <tr><td>Subsidio para el empleo</td><td class="mono">−${fmtMoney(subsidio)}</td></tr>
+        <tr><td><b>ISR a retener</b></td><td class="mono"><b>${fmtMoney(isrFinal)}</b></td></tr>
+      </table>
+
+      <h3>3. IMSS (cuota obrera)</h3>
+      <table>
+        <tr><td>Factor de integración (${diasAguinaldo} días aguinaldo, ${diasVacaciones} días vacaciones, ${pctPrimaVacacional}% prima)</td><td class="mono">${factor.toFixed(4)}</td></tr>
+        <tr><td>SBC de la ${periodoTxt}</td><td class="mono">${fmtMoney(sbcPeriodo)}</td></tr>
+        <tr><td>Enfermedad y Maternidad (excedente 3 UMA)</td><td class="mono">${fmtMoney(imss.desglose.eym)}</td></tr>
+        <tr><td>Prestaciones en dinero</td><td class="mono">${fmtMoney(imss.desglose.prest)}</td></tr>
+        <tr><td>Gastos médicos de pensionados</td><td class="mono">${fmtMoney(imss.desglose.gmp)}</td></tr>
+        <tr><td>Invalidez y Vida</td><td class="mono">${fmtMoney(imss.desglose.iv)}</td></tr>
+        <tr><td>Cesantía y Vejez</td><td class="mono">${fmtMoney(imss.desglose.ceyv)}</td></tr>
+        <tr><td><b>Total IMSS</b></td><td class="mono"><b>${fmtMoney(imss.total)}</b></td></tr>
+      </table>
+
+      <h3>4. Neto a pagar</h3>
+      <table>
+        <tr><td>Percepciones gravables</td><td class="mono">${fmtMoney(gravable)}</td></tr>
+        <tr><td>− ISR</td><td class="mono">−${fmtMoney(isrFinal)}</td></tr>
+        <tr><td>− IMSS</td><td class="mono">−${fmtMoney(imss.total)}</td></tr>
+        <tr><td>+ Bono de producción (neto)</td><td class="mono">${fmtMoney(bonoProduccion)}</td></tr>
+      </table>
+      <div class="stat" style="margin-top:14px; max-width:320px;">
+        <div class="n" style="color:#0b6e4f;">${fmtMoney(netoFinal)}</div>
+        <div class="l">NETO A PAGAR (para capturar en tu sistema)</div>
+      </div>
+      <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia con tablas 2026. No sustituye a tu contador — confirma la UMA vigente y las tablas oficiales antes de usarlo para pagos reales.</p>
+    </div>
+  `;
+});
+
 function computeVacacionesEmpleado(id){
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(!emp || !emp.fecha) return { anios:0, corresponden:0, tomados:0, restantes:0, periodoInicio:null, periodoFin:null };
