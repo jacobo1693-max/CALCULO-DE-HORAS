@@ -282,6 +282,7 @@
       <button data-tab="bajaslista">Bajas</button>
       <button data-tab="vacaciones">Vacaciones</button>
       <button data-tab="calcnomina">Calculadora ISR/IMSS</button>
+      <button data-tab="calcneto">Sueldo desde el Neto</button>
       <button data-tab="shifts">Turnos y códigos</button>
       <button data-tab="config">Configuración</button>
       <button data-tab="week">Resumen por periodo</button>
@@ -799,7 +800,7 @@
         </div>
         <div class="field">
           <label>Bono de asistencia SEMANAL (%)</label>
-          <input type="number" id="calcBonoPct" step="0.1" placeholder="Ej. 7">
+          <input type="number" id="calcBonoPct" step="0.1" value="7" placeholder="Ej. 7">
         </div>
         <div class="field">
           <label>¿Tuvo falta injustificada o retardo?</label>
@@ -846,33 +847,77 @@
       </div>
       <div class="row">
         <div class="field">
-          <label>Días de aguinaldo (para el IMSS)</label>
-          <input type="number" id="calcDiasAguinaldo" value="15" step="0.5">
+          <label>Días de aguinaldo (opcional, para el IMSS)</label>
+          <input type="number" id="calcDiasAguinaldo" value="0" step="0.5">
         </div>
         <div class="field">
-          <label>Prima vacacional (%, para el IMSS)</label>
-          <input type="number" id="calcPrimaVacacional" value="25" step="1">
+          <label>Prima vacacional (%, opcional, para el IMSS)</label>
+          <input type="number" id="calcPrimaVacacional" value="0" step="1">
         </div>
       </div>
+      <p class="sub" style="margin-top:-6px;">Déjalos en 0 (default) si tu sistema calcula el IMSS solo sobre el sueldo diario, sin integrar aguinaldo ni vacaciones — así es como coincide con Microsip en las pruebas que hicimos. Solo cámbialos si sabes que tu sistema sí integra esas prestaciones al salario base de cotización.</p>
       <div class="row" style="margin-top:10px;">
         <button class="btn" id="btnCalcularNomina">Calcular</button>
       </div>
     </div>
 
     <div id="calcResultadoArea" style="margin-top:20px;"></div>
+  </section>
 
-    <div class="form-card" style="margin-top:26px; border-color:#0b6e4f;">
-      <h3 style="margin-top:0;">Calculadora inversa: quiero que le lleguen $X netos, ¿cuál debe ser su sueldo diario?</h3>
-      <p class="sub" style="margin-top:-4px;">Usa el mismo periodo, el % de bono de asistencia semanal, y los datos de aguinaldo/prima vacacional de arriba.</p>
+  <!-- CALCULADORA INVERSA: NETO DESEADO -> SUELDO DIARIO -->
+  <section class="panel" id="panel-calcneto">
+    <h2>Sueldo diario a partir del neto deseado</h2>
+    <p class="sub">Herramienta de referencia independiente: le pones cuánto quieres que le llegue neto, y calcula el sueldo diario, el séptimo día, el bono de asistencia, el ISR y el IMSS necesarios para llegar a ese número. No sustituye a tu contador.</p>
+
+    <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Empleado (opcional — jala su antigüedad para el IMSS)</label>
+          <select id="calc2Empleado"><option value="">-- ninguno, capturar a mano --</option></select>
+        </div>
+        <div class="field">
+          <label>Periodo de pago</label>
+          <select id="calc2Periodo">
+            <option value="semanal">Semanal (7 días)</option>
+            <option value="quincenal">Quincenal (15 días)</option>
+            <option value="mensual">Mensual</option>
+          </select>
+        </div>
+      </div>
       <div class="row">
         <div class="field">
           <label>Neto que quiero que le llegue</label>
-          <input type="number" id="calcNetoDeseado" step="0.01" placeholder="Ej. 3650">
+          <input type="number" id="calc2NetoDeseado" step="0.01" placeholder="Ej. 3650">
         </div>
+        <div class="field">
+          <label>Bono de asistencia semanal (%)</label>
+          <input type="number" id="calc2BonoPct" step="0.1" value="7">
+        </div>
+        <div class="field">
+          <label>¿Tuvo falta injustificada o retardo?</label>
+          <select id="calc2SinBono">
+            <option value="no">No — sí tiene derecho al bono</option>
+            <option value="si">Sí — pierde el bono esta vez</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Días de aguinaldo (opcional, para el IMSS)</label>
+          <input type="number" id="calc2DiasAguinaldo" value="0" step="0.5">
+        </div>
+        <div class="field">
+          <label>Prima vacacional (%, opcional, para el IMSS)</label>
+          <input type="number" id="calc2PrimaVacacional" value="0" step="1">
+        </div>
+      </div>
+      <p class="sub" style="margin-top:-6px;">Déjalos en 0 (default) si tu sistema calcula el IMSS solo sobre el sueldo diario, sin integrar aguinaldo ni vacaciones.</p>
+      <div class="row" style="margin-top:10px;">
         <button class="btn" id="btnCalcularSueldoDiario">Calcular sueldo diario</button>
       </div>
-      <div id="calcSueldoDiarioResultado" style="margin-top:14px;"></div>
     </div>
+
+    <div id="calcSueldoDiarioResultado" style="margin-top:20px;"></div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -2737,6 +2782,7 @@ function refreshAllEmployeeSelects(){
   refreshVacEmpleadoSelect();
   renderVacacionesResumen();
   refreshCalcEmpleadoSelect();
+  refreshCalc2EmpleadoSelect();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -3533,6 +3579,17 @@ function refreshCalcEmpleadoSelect(){
   sel.innerHTML = '<option value="">-- ninguno, capturar a mano --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
 }
+function refreshCalc2EmpleadoSelect(){
+  const sel = document.getElementById('calc2Empleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = activeEmployeeIds();
+  sel.innerHTML = '<option value="">-- ninguno, capturar a mano --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+document.getElementById('calc2Empleado').addEventListener('change', ()=>{
+  document.getElementById('calc2BonoPct').value = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7);
+});
 document.getElementById('calcEmpleado').addEventListener('change', ()=>{
   const id = document.getElementById('calcEmpleado').value;
   if(!id) return;
@@ -3697,13 +3754,13 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   `;
 });
 document.getElementById('btnCalcularSueldoDiario').addEventListener('click', ()=>{
-  const netoDeseado = +document.getElementById('calcNetoDeseado').value || 0;
-  const periodo = document.getElementById('calcPeriodo').value;
-  const bonoPct = +document.getElementById('calcBonoPct').value || 0;
-  const sinBono = document.getElementById('calcSinBono').value === 'si';
-  const diasAguinaldo = +document.getElementById('calcDiasAguinaldo').value || 15;
-  const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
-  const id = document.getElementById('calcEmpleado').value;
+  const netoDeseado = +document.getElementById('calc2NetoDeseado').value || 0;
+  const periodo = document.getElementById('calc2Periodo').value;
+  const bonoPct = +document.getElementById('calc2BonoPct').value || 0;
+  const sinBono = document.getElementById('calc2SinBono').value === 'si';
+  const diasAguinaldo = +document.getElementById('calc2DiasAguinaldo').value || 0;
+  const pctPrimaVacacional = +document.getElementById('calc2PrimaVacacional').value || 0;
+  const id = document.getElementById('calc2Empleado').value;
   const area = document.getElementById('calcSueldoDiarioResultado');
 
   if(!netoDeseado){ toast('Captura el neto que quieres que le llegue.'); area.innerHTML=''; return; }
