@@ -798,7 +798,7 @@
           <input type="number" id="calcSueldoDiario" step="0.01" placeholder="Ej. 565.88">
         </div>
         <div class="field">
-          <label>Bono de puntualidad (%)</label>
+          <label>Bono de asistencia SEMANAL (%)</label>
           <input type="number" id="calcBonoPct" step="0.1" placeholder="Ej. 7">
         </div>
         <div class="field">
@@ -809,6 +809,20 @@
           </select>
         </div>
       </div>
+      <div class="row">
+        <div class="field">
+          <label>Bono ANUAL (%, distinto al semanal)</label>
+          <input type="number" id="calcBonoAnualPct" step="0.5" placeholder="Ej. 6 o 20, según la persona">
+        </div>
+        <div class="field">
+          <label>Tope de horas para el bono anual</label>
+          <select id="calcBonoAnualTope">
+            <option value="48">48 horas</option>
+            <option value="51">51 horas</option>
+          </select>
+        </div>
+      </div>
+      <p class="sub" style="margin-top:-6px;">Este bono anual NO se paga esta semana — solo se va acumulando para el cierre del año, se muestra aparte del sueldo semanal.</p>
       <div class="row">
         <div class="field">
           <label>Horas normales del periodo</label>
@@ -3488,7 +3502,11 @@ document.getElementById('calcEmpleado').addEventListener('change', ()=>{
     const horasDia = emp.horasSemana ? emp.horasSemana/6 : 8;
     document.getElementById('calcSueldoDiario').value = (emp.sueldoHora*horasDia).toFixed(2);
   }
-  if(emp.bonoAnualPct) document.getElementById('calcBonoPct').value = emp.bonoAnualPct;
+  // Bono SEMANAL (el de asistencia, todo o nada cada semana) viene de la configuración general
+  document.getElementById('calcBonoPct').value = (CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7);
+  // Bono ANUAL (el 6%-20% que varía por persona) viene de la ficha del empleado — es un bono distinto
+  if(emp.bonoAnualPct!=null) document.getElementById('calcBonoAnualPct').value = emp.bonoAnualPct;
+  if(emp.bonoAnualTopeHoras) document.getElementById('calcBonoAnualTope').value = emp.bonoAnualTopeHoras;
 });
 document.getElementById('calcPeriodo').addEventListener('change', ()=>{
   const periodo = document.getElementById('calcPeriodo').value;
@@ -3508,6 +3526,8 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
   const horasNormales = +document.getElementById('calcHorasNormales').value || (DIAS_PERIODO_CALC[periodo]*8);
   const horasTrabajadasInput = document.getElementById('calcHorasTrabajadas').value;
+  const bonoAnualPct = +document.getElementById('calcBonoAnualPct').value || 0;
+  const bonoAnualTope = +document.getElementById('calcBonoAnualTope').value || 48;
   const area = document.getElementById('calcResultadoArea');
 
   if(!sueldoDiario){ toast('Captura el sueldo diario.'); area.innerHTML=''; return; }
@@ -3521,6 +3541,16 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
 
   const bono = sinBono ? 0 : sueldoPeriodoCompleto*(bonoPct/100);
   const gravable = sueldoAPagar + bono;
+
+  // Bono ANUAL: aporte de este periodo, NO se paga ahora, solo se acumula para fin de año.
+  // Se calcula sobre las horas realmente trabajadas, topadas al máximo elegido (escalado
+  // si el periodo no es semanal, ej. quincenal = 2 semanas de tope).
+  let aporteBonoAnual = 0;
+  if(bonoAnualPct>0 && sueldoPorHora>0 && !sinBono){
+    const topeDelPeriodo = bonoAnualTope * (dias/7);
+    const horasTopadas = Math.min(horasTrabajadas, topeDelPeriodo);
+    aporteBonoAnual = horasTopadas * sueldoPorHora * (bonoAnualPct/100);
+  }
 
   const { isr, rango, excedente } = calcularISR(gravable, periodo);
   const subsidio = calcularSubsidio(gravable, periodo);
@@ -3571,9 +3601,9 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
         <tr><td><b>Total IMSS</b></td><td class="mono"><b>${fmtMoney(imss.total)}</b></td></tr>
       </table>
 
-      <h3>4. Neto a pagar</h3>
+      <h3>4. Neto a pagar (sueldo de esta ${periodoTxt})</h3>
       <table>
-        <tr><td>Sueldo + bono de puntualidad, ya con ISR e IMSS descontados</td><td class="mono">${fmtMoney(netoSinProduccion)}</td></tr>
+        <tr><td>Sueldo + bono de asistencia semanal, ya con ISR e IMSS descontados</td><td class="mono">${fmtMoney(netoSinProduccion)}</td></tr>
         <tr><td>+ Bono de producción (neto, sin descuentos)</td><td class="mono">${fmtMoney(bonoProduccion)}</td></tr>
       </table>
       <div class="row" style="margin-top:14px; gap:16px;">
@@ -3587,8 +3617,21 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
         </div>
       </div>
 
+      ${bonoAnualPct>0 ? `
+      <h3 style="margin-top:22px; color:#0b6e4f;">5. Bono ANUAL (no se paga esta ${periodoTxt} — solo se acumula)</h3>
+      <p class="sub" style="margin-top:-4px;">Este bono es distinto al de asistencia semanal. No se suma al pago de esta ${periodoTxt}, ni afecta el ISR ni el IMSS de arriba — solo te sirve para llevar la cuenta de cuánto se le va acumulando para el cierre del año (revisa el total real en su Hoja de Vida, que ya lo lleva sumado semana por semana).</p>
+      <table>
+        <tr><td>Porcentaje anual asignado</td><td class="mono">${bonoAnualPct}%</td></tr>
+        <tr><td>Tope de horas (${dias===7?'por semana':'escalado a este periodo'})</td><td class="mono">${bonoAnualTope} h${dias!==7?` × ${(dias/7).toFixed(2)} semanas`:''}</td></tr>
+        <tr><td>Horas que cuentan (topadas)</td><td class="mono">${Math.min(horasTrabajadas, bonoAnualTope*(dias/7)).toFixed(1)} h</td></tr>
+      </table>
+      <div class="stat" style="margin-top:10px; max-width:320px; border-color:#0b6e4f;">
+        <div class="n" style="color:#0b6e4f;">${fmtMoney(aporteBonoAnual)}</div>
+        <div class="l">Aporte de este periodo al bono anual acumulado</div>
+      </div>` : ''}
+
       ${brutoInfo ? `
-      <h3 style="margin-top:22px;">5. Bono gravado — cálculo del bruto</h3>
+      <h3 style="margin-top:22px;">6. Bono gravado — cálculo del bruto</h3>
       <p class="sub" style="margin-top:-4px;">Para que a este empleado le lleguen exactamente <b>${fmtMoney(bonoGravadoDeseado)}</b> netos de este bono (sí sujeto a ISR), tienes que capturarlo así:</p>
       <table>
         <tr><td>ISR adicional que provoca este bono</td><td class="mono">${fmtMoney(brutoInfo.isrAdicional)}</td></tr>
