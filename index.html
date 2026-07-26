@@ -860,6 +860,19 @@
     </div>
 
     <div id="calcResultadoArea" style="margin-top:20px;"></div>
+
+    <div class="form-card" style="margin-top:26px; border-color:#0b6e4f;">
+      <h3 style="margin-top:0;">Calculadora inversa: quiero que le lleguen $X netos, ¿cuál debe ser su sueldo diario?</h3>
+      <p class="sub" style="margin-top:-4px;">Usa el mismo periodo, el % de bono de asistencia semanal, y los datos de aguinaldo/prima vacacional de arriba.</p>
+      <div class="row">
+        <div class="field">
+          <label>Neto que quiero que le llegue</label>
+          <input type="number" id="calcNetoDeseado" step="0.01" placeholder="Ej. 3650">
+        </div>
+        <button class="btn" id="btnCalcularSueldoDiario">Calcular sueldo diario</button>
+      </div>
+      <div id="calcSueldoDiarioResultado" style="margin-top:14px;"></div>
+    </div>
   </section>
 
   <!-- SHIFTS + PAY CODES -->
@@ -3458,6 +3471,37 @@ function calcularBrutoParaNeto(netoDeseado, gravableBase, periodo){
   const isrAdicional = isrConBono - isrBase;
   return { bruto, isrAdicional };
 }
+function calcularSueldoDiarioParaNeto(netoDeseado, periodo, bonoPct, sinBono, factor){
+  const dias = DIAS_PERIODO_CALC[periodo];
+  const diasSeptimo = dias/7;      // proporción de "día de descanso pagado" dentro del periodo
+  const diasNormales = dias - diasSeptimo;
+  function netoParaSueldo(sd){
+    const sueldoPeriodo = sd*dias;
+    const bono = sinBono ? 0 : sueldoPeriodo*(bonoPct/100);
+    const gravable = sueldoPeriodo + bono;
+    const isrFinal = calcularISRNeto(gravable, periodo);
+    const sbcPeriodo = sd*factor*dias;
+    const imss = calcularIMSSObrera(sbcPeriodo, periodo);
+    return gravable - isrFinal - imss.total;
+  }
+  let lo = 0, hi = netoDeseado*2 + 3000;
+  for(let i=0; i<60; i++){
+    const mid = (lo+hi)/2;
+    if(netoParaSueldo(mid) < netoDeseado) lo = mid; else hi = mid;
+  }
+  const sueldoDiario = (lo+hi)/2;
+  const sueldoNormal = sueldoDiario*diasNormales;
+  const sueldoSeptimo = sueldoDiario*diasSeptimo;
+  const sueldoPeriodo = sueldoDiario*dias;
+  const bono = sinBono ? 0 : sueldoPeriodo*(bonoPct/100);
+  const gravable = sueldoPeriodo + bono;
+  const isrFinal = calcularISRNeto(gravable, periodo);
+  const sbcDiario = sueldoDiario*factor;
+  const sbcPeriodo = sbcDiario*dias;
+  const imss = calcularIMSSObrera(sbcPeriodo, periodo);
+  const netoObtenido = gravable - isrFinal - imss.total;
+  return { sueldoDiario, sueldoNormal, sueldoSeptimo, diasNormales, diasSeptimo, sueldoPeriodo, bono, gravable, isrFinal, imss, sbcDiario, netoObtenido };
+}
 function calcularIMSSObrera(sbcPeriodo, periodo){
   const dias = DIAS_PERIODO_CALC[periodo];
   const tresUMA = UMA_DIARIA_2026*3*dias;
@@ -3575,8 +3619,13 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
     <div class="form-card">
       <h3 style="margin-top:0;">1. Percepciones de la ${periodoTxt}</h3>
       <table>
-        <tr><td>Sueldo${trabajoCompleto ? ` (${dias} días completos)` : ` (proporcional a ${horasTrabajadas} de ${horasNormales} horas)`}</td><td class="mono">${fmtMoney(sueldoAPagar)}</td></tr>
-        <tr><td>Bono de puntualidad (${bonoPct}%, sobre la semana completa)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
+        ${trabajoCompleto ? `
+        <tr><td>Sueldo normal (${(dias-dias/7).toFixed(2)} días)</td><td class="mono">${fmtMoney(sueldoDiario*(dias-dias/7))}</td></tr>
+        <tr><td>Séptimo día (${(dias/7).toFixed(2)} días)</td><td class="mono">${fmtMoney(sueldoDiario*(dias/7))}</td></tr>
+        ` : `
+        <tr><td>Sueldo (proporcional a ${horasTrabajadas} de ${horasNormales} horas)</td><td class="mono">${fmtMoney(sueldoAPagar)}</td></tr>
+        `}
+        <tr><td>Bono de asistencia (${bonoPct}%, sobre la semana completa)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
         <tr><td><b>Total gravable</b></td><td class="mono"><b>${fmtMoney(gravable)}</b></td></tr>
       </table>
 
@@ -3645,6 +3694,71 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
 
       <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia con tablas 2026. No sustituye a tu contador — confirma la UMA vigente y las tablas oficiales antes de usarlo para pagos reales.</p>
     </div>
+  `;
+});
+document.getElementById('btnCalcularSueldoDiario').addEventListener('click', ()=>{
+  const netoDeseado = +document.getElementById('calcNetoDeseado').value || 0;
+  const periodo = document.getElementById('calcPeriodo').value;
+  const bonoPct = +document.getElementById('calcBonoPct').value || 0;
+  const sinBono = document.getElementById('calcSinBono').value === 'si';
+  const diasAguinaldo = +document.getElementById('calcDiasAguinaldo').value || 15;
+  const pctPrimaVacacional = +document.getElementById('calcPrimaVacacional').value || 25;
+  const id = document.getElementById('calcEmpleado').value;
+  const area = document.getElementById('calcSueldoDiarioResultado');
+
+  if(!netoDeseado){ toast('Captura el neto que quieres que le llegue.'); area.innerHTML=''; return; }
+
+  const { factor, diasVacaciones } = factorIntegracionCalc(id, diasAguinaldo, pctPrimaVacacional);
+  const r = calcularSueldoDiarioParaNeto(netoDeseado, periodo, bonoPct, sinBono, factor);
+  const dias = DIAS_PERIODO_CALC[periodo];
+  const periodoTxt = {semanal:'semana', quincenal:'quincena', mensual:'mes'}[periodo];
+
+  area.innerHTML = `
+    <h3 style="margin-top:0;">1. Percepciones de la ${periodoTxt}</h3>
+    <table>
+      <tr><td>Sueldo normal (${r.diasNormales.toFixed(2)} días)</td><td class="mono">${fmtMoney(r.sueldoNormal)}</td></tr>
+      <tr><td>Séptimo día (${r.diasSeptimo.toFixed(2)} días)</td><td class="mono">${fmtMoney(r.sueldoSeptimo)}</td></tr>
+      <tr><td>Bono de asistencia (${bonoPct}%)${sinBono?' — no aplica':''}</td><td class="mono">${fmtMoney(r.bono)}</td></tr>
+      <tr><td><b>Total gravable</b></td><td class="mono"><b>${fmtMoney(r.gravable)}</b></td></tr>
+    </table>
+
+    <h3>2. ISR</h3>
+    <table>
+      <tr><td><b>ISR a retener</b></td><td class="mono"><b>${fmtMoney(r.isrFinal)}</b></td></tr>
+    </table>
+
+    <h3>3. IMSS (cuota obrera)</h3>
+    <table>
+      <tr><td>Enfermedad y Maternidad (excedente 3 UMA)</td><td class="mono">${fmtMoney(r.imss.desglose.eym)}</td></tr>
+      <tr><td>Prestaciones en dinero</td><td class="mono">${fmtMoney(r.imss.desglose.prest)}</td></tr>
+      <tr><td>Gastos médicos de pensionados</td><td class="mono">${fmtMoney(r.imss.desglose.gmp)}</td></tr>
+      <tr><td>Invalidez y Vida</td><td class="mono">${fmtMoney(r.imss.desglose.iv)}</td></tr>
+      <tr><td>Cesantía y Vejez</td><td class="mono">${fmtMoney(r.imss.desglose.ceyv)}</td></tr>
+      <tr><td><b>Total IMSS</b></td><td class="mono"><b>${fmtMoney(r.imss.total)}</b></td></tr>
+    </table>
+
+    <h3>4. Comprobación</h3>
+    <table>
+      <tr><td>Total gravable</td><td class="mono">${fmtMoney(r.gravable)}</td></tr>
+      <tr><td>− ISR</td><td class="mono">−${fmtMoney(r.isrFinal)}</td></tr>
+      <tr><td>− IMSS</td><td class="mono">−${fmtMoney(r.imss.total)}</td></tr>
+      <tr><td><b>Neto obtenido</b></td><td class="mono"><b>${fmtMoney(r.netoObtenido)}</b></td></tr>
+    </table>
+    <div class="row" style="margin-top:14px; gap:16px;">
+      <div class="stat" style="max-width:280px; border-color:#0b6e4f;">
+        <div class="n" style="color:#0b6e4f;">${fmtMoney(r.sueldoDiario)}</div>
+        <div class="l">SUELDO DIARIO a capturar</div>
+      </div>
+      <div class="stat" style="max-width:280px;">
+        <div class="n" style="color:#c2780c;">${fmtMoney(r.bono)}</div>
+        <div class="l">BONO DE ASISTENCIA (${bonoPct}%) resultante</div>
+      </div>
+      <div class="stat" style="max-width:280px;">
+        <div class="n" style="color:#13233b;">${fmtMoney(r.sbcDiario)}</div>
+        <div class="l">Salario diario integrado (SBC, para el IMSS)</div>
+      </div>
+    </div>
+    <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia. El factor de integración usado fue ${factor.toFixed(4)} (${diasAguinaldo} días de aguinaldo, ${diasVacaciones} días de vacaciones, ${pctPrimaVacacional}% de prima vacacional). Confirma con tu contador antes de usarlo para pagos reales.</p>
   `;
 });
 
