@@ -3815,9 +3815,21 @@ document.getElementById('btnCalcularSueldoDiario').addEventListener('click', ()=
         <div class="l">Salario diario integrado (SBC, para el IMSS)</div>
       </div>
     </div>
+    ${id ? `<div class="row" style="margin-top:14px;">
+      <button class="btn secondary" onclick="aplicarSueldoDiarioCalculado('${id}', ${r.sueldoDiario.toFixed(2)})">Aplicar ${fmtMoney(r.sueldoDiario)} como su sueldo diario en "Empleados"</button>
+    </div>` : `<p class="sub" style="margin-top:10px;">Elige un empleado arriba para poder aplicar este sueldo directo a su ficha con un clic.</p>`}
     <p class="sub" style="margin-top:14px;">⚠️ Cálculo de referencia. El factor de integración usado fue ${factor.toFixed(4)} (${diasAguinaldo} días de aguinaldo, ${diasVacaciones} días de vacaciones, ${pctPrimaVacacional}% de prima vacacional). Confirma con tu contador antes de usarlo para pagos reales.</p>
   `;
 });
+function aplicarSueldoDiarioCalculado(id, sueldoDiario){
+  const idx = EMPLOYEES.findIndex(e=>e.id===id);
+  if(idx===-1){ toast('Empleado no encontrado.'); return; }
+  if(!confirm(`¿Aplicar ${fmtMoney(sueldoDiario)} como el nuevo sueldo diario de ${EMPLOYEES[idx].nombre}?`)) return;
+  EMPLOYEES[idx].sueldoDiario = sueldoDiario;
+  saveStorage();
+  renderEmployeesTable();
+  toast('Sueldo diario actualizado en su ficha.');
+}
 
 function computeVacacionesEmpleado(id){
   const emp = EMPLOYEES.find(e=>e.id===id);
