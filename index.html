@@ -801,6 +801,32 @@
         </div>
         <button class="btn" id="btnAddBonoProduccion">Registrar</button>
       </div>
+    </div>
+
+    <h3 style="margin-top:26px;">Ver historial</h3>
+    <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Empleados a incluir</label>
+          <select id="bonoProdHistModo">
+            <option value="all">Todos los empleados</option>
+            <option value="one">Un solo empleado</option>
+          </select>
+        </div>
+        <div class="field" id="bonoProdHistUnoWrap" style="display:none;">
+          <label>Empleado</label>
+          <select id="bonoProdHistEmpleado"></select>
+        </div>
+        <div class="field">
+          <label>Desde</label>
+          <input type="date" id="bonoProdHistDesde">
+        </div>
+        <div class="field">
+          <label>Hasta</label>
+          <input type="date" id="bonoProdHistHasta">
+        </div>
+        <button class="btn secondary" id="btnVerHistorialBonoProd">Ver historial</button>
+      </div>
       <div id="bonoProdHistorialArea" style="margin-top:14px;"></div>
     </div>
   </section>
@@ -1721,6 +1747,8 @@ async function loadLocalIntoMemory(){
   document.getElementById('calMonth').value = `${now.getFullYear()}-${pad(now.getMonth()+1)}`;
   if(!document.getElementById('hvDesde').value) document.getElementById('hvDesde').value = `${now.getFullYear()}-01-01`;
   if(!document.getElementById('hvHasta').value) document.getElementById('hvHasta').value = isoDate(now);
+  if(!document.getElementById('bonoProdHistDesde').value) document.getElementById('bonoProdHistDesde').value = `${now.getFullYear()}-01-01`;
+  if(!document.getElementById('bonoProdHistHasta').value) document.getElementById('bonoProdHistHasta').value = isoDate(now);
   renderDashboard();
 }
 async function loadStorage(){
@@ -3909,29 +3937,73 @@ function refreshBonoProdEmpleadoSelect(){
   const ids = activeEmployeeIds();
   sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
+
+  const sel2 = document.getElementById('bonoProdHistEmpleado');
+  if(sel2){
+    const cur2 = sel2.value;
+    sel2.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+    if(ids.includes(cur2)) sel2.value = cur2;
+  }
 }
 function renderBonoProdHistorial(){
-  const id = document.getElementById('bonoProdEmpleado').value;
+  const modo = document.getElementById('bonoProdHistModo').value;
+  const from = document.getElementById('bonoProdHistDesde').value;
+  const to = document.getElementById('bonoProdHistHasta').value;
   const area = document.getElementById('bonoProdHistorialArea');
-  if(!id){ area.innerHTML = ''; return; }
-  const info = computeBonoProduccionEmpleado(id);
-  if(!info.porSemana.length){ area.innerHTML = emptyState('Este empleado no tiene bonos de producción registrados todavía.'); return; }
-  let html = `<div class="hint" style="margin-bottom:10px;">Acumulado total: <b>${fmtMoney(info.totalAcumulado)}</b></div>`;
-  info.porSemana.forEach(sem=>{
+
+  const ids = modo==='one'
+    ? (document.getElementById('bonoProdHistEmpleado').value ? [document.getElementById('bonoProdHistEmpleado').value] : [])
+    : activeEmployeeIds();
+
+  if(!ids.length){ area.innerHTML = emptyState('Elige un empleado, o "Todos los empleados".'); return; }
+
+  // Juntar todos los registros (de los empleados incluidos) que caigan en el rango de fechas
+  const registrosConNombre = [];
+  ids.forEach(id=>{
+    const emp = EMPLOYEES.find(e=>e.id===id);
+    const registros = (emp && emp.bonosProduccion) || [];
+    registros.forEach(r=>{
+      if(from && r.fecha < from) return;
+      if(to && r.fecha > to) return;
+      registrosConNombre.push({ id, nombre: employeeDisplayName(id), ...r });
+    });
+  });
+
+  if(!registrosConNombre.length){ area.innerHTML = emptyState('No hay bonos de producción registrados en ese rango.'); return; }
+
+  const totalGeneral = registrosConNombre.reduce((s,r)=>s+(+r.monto||0),0);
+
+  // Agrupar por semana (lunes a domingo)
+  const semanasMap = {};
+  registrosConNombre.forEach(r=>{
+    const wk = mondayWeekRange(r.fecha);
+    if(!semanasMap[wk.from]) semanasMap[wk.from] = { from: wk.from, to: wk.to, total: 0, registros: [] };
+    semanasMap[wk.from].total += (+r.monto||0);
+    semanasMap[wk.from].registros.push(r);
+  });
+  const porSemana = Object.values(semanasMap).sort((a,b)=> a.from<b.from?1:-1);
+
+  let html = `<div class="hint" style="margin-bottom:10px;">Total en el rango: <b>${fmtMoney(totalGeneral)}</b></div>`;
+  porSemana.forEach(sem=>{
     html += `<h4 style="margin:14px 0 6px;">Semana del ${sem.from} al ${sem.to} — <span class="mono">${fmtMoney(sem.total)}</span></h4>
-      <table><thead><tr><th>Fecha</th><th>Monto</th><th>Nota</th><th></th></tr></thead><tbody>`;
+      <table><thead><tr>${modo==='all'?'<th>Empleado</th>':''}<th>Fecha</th><th>Monto</th><th>Nota</th><th></th></tr></thead><tbody>`;
     sem.registros.sort((a,b)=> a.fecha<b.fecha?1:-1).forEach(r=>{
       html += `<tr>
+        ${modo==='all'?`<td><b>${r.nombre}</b></td>`:''}
         <td class="mono">${r.fecha}</td>
         <td class="mono">${fmtMoney(r.monto)}</td>
         <td>${r.nota||'—'}</td>
-        <td><button class="btn danger small" onclick="deleteBonoProduccionRegistro('${id}','${r.fecha}')">Eliminar</button></td>
+        <td><button class="btn danger small" onclick="deleteBonoProduccionRegistro('${r.id}','${r.fecha}')">Eliminar</button></td>
       </tr>`;
     });
     html += `</tbody></table>`;
   });
   area.innerHTML = html;
 }
+document.getElementById('bonoProdHistModo').addEventListener('change', ()=>{
+  document.getElementById('bonoProdHistUnoWrap').style.display = document.getElementById('bonoProdHistModo').value==='one' ? '' : 'none';
+});
+document.getElementById('btnVerHistorialBonoProd').addEventListener('click', renderBonoProdHistorial);
 function deleteBonoProduccionRegistro(id, fecha){
   if(!confirm('¿Eliminar este registro de bono de producción?')) return;
   const i = EMPLOYEES.findIndex(e=>e.id===id);
@@ -3945,7 +4017,6 @@ function deleteBonoProduccionRegistro(id, fecha){
   renderBonoProdResumen();
   toast('Registro eliminado.');
 }
-document.getElementById('bonoProdEmpleado').addEventListener('change', renderBonoProdHistorial);
 document.getElementById('btnAddBonoProduccion').addEventListener('click', ()=>{
   const id = document.getElementById('bonoProdEmpleado').value;
   const fecha = document.getElementById('bonoProdFecha').value;
