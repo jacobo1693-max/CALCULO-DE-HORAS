@@ -281,6 +281,7 @@
       <button data-tab="baja">Renuncia y finiquito</button>
       <button data-tab="bajaslista">Bajas</button>
       <button data-tab="vacaciones">Vacaciones</button>
+      <button data-tab="bonoproduccion">Bono de Producción</button>
       <button data-tab="calcnomina">Calculadora ISR/IMSS</button>
       <button data-tab="calcneto">Sueldo desde el Neto</button>
       <button data-tab="shifts">Turnos y códigos</button>
@@ -770,6 +771,37 @@
         <button class="btn" id="btnAddVacacion">Registrar</button>
       </div>
       <div id="vacHistorialArea" style="margin-top:14px;"></div>
+    </div>
+  </section>
+
+  <!-- BONO DE PRODUCCIÓN -->
+  <section class="panel" id="panel-bonoproduccion">
+    <h2>Bono de producción</h2>
+    <p class="sub">Registra el bono de producción que le das a cada empleado por semana. Se muestra su historial semanal, el acumulado total, y aparece resumido en el Dashboard.</p>
+    <div id="bonoProdResumenArea"></div>
+
+    <h3 style="margin-top:26px;">Registrar bono de producción</h3>
+    <div class="form-card">
+      <div class="row">
+        <div class="field">
+          <label>Empleado</label>
+          <select id="bonoProdEmpleado"></select>
+        </div>
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="bonoProdFecha">
+        </div>
+        <div class="field">
+          <label>Monto</label>
+          <input type="number" id="bonoProdMonto" min="0" step="0.01" placeholder="Ej. 700">
+        </div>
+        <div class="field" style="min-width:220px;">
+          <label>Nota (opcional)</label>
+          <input type="text" id="bonoProdNota" placeholder="Ej. Semana de producción alta">
+        </div>
+        <button class="btn" id="btnAddBonoProduccion">Registrar</button>
+      </div>
+      <div id="bonoProdHistorialArea" style="margin-top:14px;"></div>
     </div>
   </section>
 
@@ -1755,6 +1787,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('topbarTitle').textContent = btn.textContent;
     if(btn.dataset.tab === 'dashboard') renderDashboard();
     if(btn.dataset.tab === 'vacaciones') renderVacacionesResumen();
+    if(btn.dataset.tab === 'bonoproduccion') renderBonoProdResumen();
   });
 });
 document.querySelectorAll('.subtabs button').forEach(btn=>{
@@ -2783,6 +2816,8 @@ function refreshAllEmployeeSelects(){
   renderVacacionesResumen();
   refreshCalcEmpleadoSelect();
   refreshCalc2EmpleadoSelect();
+  refreshBonoProdEmpleadoSelect();
+  renderBonoProdResumen();
 }
 
 /* ---------- resumen por periodo ---------- */
@@ -3831,6 +3866,104 @@ function aplicarSueldoDiarioCalculado(id, sueldoDiario){
   toast('Sueldo diario actualizado en su ficha.');
 }
 
+function computeBonoProduccionEmpleado(id){
+  const emp = EMPLOYEES.find(e=>e.id===id);
+  const registros = (emp && emp.bonosProduccion) ? [...emp.bonosProduccion] : [];
+  const totalAcumulado = registros.reduce((s,r)=>s+(+r.monto||0),0);
+  const semanasMap = {};
+  registros.forEach(r=>{
+    const wk = mondayWeekRange(r.fecha);
+    if(!semanasMap[wk.from]) semanasMap[wk.from] = { from: wk.from, to: wk.to, total: 0, registros: [] };
+    semanasMap[wk.from].total += (+r.monto||0);
+    semanasMap[wk.from].registros.push(r);
+  });
+  const porSemana = Object.values(semanasMap).sort((a,b)=> a.from<b.from?1:-1);
+  return { totalAcumulado, porSemana, registros };
+}
+function renderBonoProdResumen(){
+  const area = document.getElementById('bonoProdResumenArea');
+  if(!area) return;
+  const ids = activeEmployeeIds();
+  if(!ids.length){ area.innerHTML = emptyState('No hay empleados activos registrados todavía.'); return; }
+  const hoy = new Date();
+  const semanaActual = mondayWeekRange(isoDate(hoy));
+  let html = `<table><thead><tr><th>Empleado</th><th>No.</th><th>Esta semana (${semanaActual.from} al ${semanaActual.to})</th><th>Acumulado total</th></tr></thead><tbody>`;
+  ids.forEach(id=>{
+    const nombre = employeeDisplayName(id);
+    const info = computeBonoProduccionEmpleado(id);
+    const semanaAct = info.porSemana.find(s=>s.from===semanaActual.from);
+    html += `<tr>
+      <td><b>${nombre}</b></td>
+      <td class="mono">${id}</td>
+      <td class="mono">${semanaAct ? fmtMoney(semanaAct.total) : '—'}</td>
+      <td class="mono"><b>${fmtMoney(info.totalAcumulado)}</b></td>
+    </tr>`;
+  });
+  html += `</tbody></table>`;
+  area.innerHTML = html;
+}
+function refreshBonoProdEmpleadoSelect(){
+  const sel = document.getElementById('bonoProdEmpleado');
+  if(!sel) return;
+  const cur = sel.value;
+  const ids = activeEmployeeIds();
+  sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+  if(ids.includes(cur)) sel.value = cur;
+}
+function renderBonoProdHistorial(){
+  const id = document.getElementById('bonoProdEmpleado').value;
+  const area = document.getElementById('bonoProdHistorialArea');
+  if(!id){ area.innerHTML = ''; return; }
+  const info = computeBonoProduccionEmpleado(id);
+  if(!info.porSemana.length){ area.innerHTML = emptyState('Este empleado no tiene bonos de producción registrados todavía.'); return; }
+  let html = `<div class="hint" style="margin-bottom:10px;">Acumulado total: <b>${fmtMoney(info.totalAcumulado)}</b></div>`;
+  info.porSemana.forEach(sem=>{
+    html += `<h4 style="margin:14px 0 6px;">Semana del ${sem.from} al ${sem.to} — <span class="mono">${fmtMoney(sem.total)}</span></h4>
+      <table><thead><tr><th>Fecha</th><th>Monto</th><th>Nota</th><th></th></tr></thead><tbody>`;
+    sem.registros.sort((a,b)=> a.fecha<b.fecha?1:-1).forEach(r=>{
+      html += `<tr>
+        <td class="mono">${r.fecha}</td>
+        <td class="mono">${fmtMoney(r.monto)}</td>
+        <td>${r.nota||'—'}</td>
+        <td><button class="btn danger small" onclick="deleteBonoProduccionRegistro('${id}','${r.fecha}')">Eliminar</button></td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  });
+  area.innerHTML = html;
+}
+function deleteBonoProduccionRegistro(id, fecha){
+  if(!confirm('¿Eliminar este registro de bono de producción?')) return;
+  const i = EMPLOYEES.findIndex(e=>e.id===id);
+  if(i===-1) return;
+  const registros = EMPLOYEES[i].bonosProduccion || [];
+  const idx = registros.findIndex(r=>r.fecha===fecha);
+  if(idx>-1) registros.splice(idx,1);
+  EMPLOYEES[i].bonosProduccion = registros;
+  saveStorage();
+  renderBonoProdHistorial();
+  renderBonoProdResumen();
+  toast('Registro eliminado.');
+}
+document.getElementById('bonoProdEmpleado').addEventListener('change', renderBonoProdHistorial);
+document.getElementById('btnAddBonoProduccion').addEventListener('click', ()=>{
+  const id = document.getElementById('bonoProdEmpleado').value;
+  const fecha = document.getElementById('bonoProdFecha').value;
+  const monto = +document.getElementById('bonoProdMonto').value;
+  const nota = document.getElementById('bonoProdNota').value.trim();
+  if(!id || !fecha || !monto){ toast('Completa empleado, fecha y monto.'); return; }
+  const i = EMPLOYEES.findIndex(e=>e.id===id);
+  if(i===-1){ toast('Empleado no encontrado.'); return; }
+  if(!EMPLOYEES[i].bonosProduccion) EMPLOYEES[i].bonosProduccion = [];
+  EMPLOYEES[i].bonosProduccion.push({ fecha, monto, nota });
+  saveStorage();
+  document.getElementById('bonoProdMonto').value = '';
+  document.getElementById('bonoProdNota').value = '';
+  renderBonoProdHistorial();
+  renderBonoProdResumen();
+  toast('Bono de producción registrado.');
+});
+
 function computeVacacionesEmpleado(id){
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(!emp || !emp.fecha) return { anios:0, corresponden:0, tomados:0, restantes:0, periodoInicio:null, periodoFin:null };
@@ -4812,7 +4945,10 @@ function computeDashboardData(from, to){
     const r = computeEmployeePeriod(id, from, to);
     const emp = EMPLOYEES.find(e=>e.id===id);
     const depto = (emp && emp.depto) ? emp.depto : 'Sin departamento';
-    return Object.assign({ id, nombre: employeeDisplayName(id), depto }, r);
+    const bonoProduccionPeriodo = ((emp && emp.bonosProduccion) || [])
+      .filter(reg=>reg.fecha>=from && reg.fecha<=to)
+      .reduce((s,reg)=>s+(+reg.monto||0),0);
+    return Object.assign({ id, nombre: employeeDisplayName(id), depto, bonoProduccionPeriodo }, r);
   });
   if(DASH_FILTER_DEPTO){
     perEmployee = perEmployee.filter(e=>e.depto === DASH_FILTER_DEPTO);
@@ -4841,8 +4977,9 @@ function computeDashboardData(from, to){
   const anySueldoGlobal = perEmployee.some(e=>e.sueldoHora>0);
   const tasaAsistencia = totalLaborables>0 ? ((totalLaborables-totalFaltas)/totalLaborables*100) : null;
   const empleadosConBono = perEmployee.filter(e=>e.bono>0).length;
+  const totalBonoProduccion = perEmployee.reduce((s,e)=>s+e.bonoProduccionPeriodo,0);
 
-  return { perEmployee, deptoList, totalHoras, totalExtra, totalRetardos, totalFaltas, totalLaborables, totalPago, anySueldoGlobal, tasaAsistencia, empleadosConBono, totalEmpleados: perEmployee.length };
+  return { perEmployee, deptoList, totalHoras, totalExtra, totalRetardos, totalFaltas, totalLaborables, totalPago, anySueldoGlobal, tasaAsistencia, empleadosConBono, totalBonoProduccion, totalEmpleados: perEmployee.length };
 }
 function getDashboardGroups(data, mode){
   if(mode==='empleado'){
@@ -5039,6 +5176,7 @@ function renderDashboard(){
     <div class="stat"><div class="n">${data.totalFaltas}</div><div class="l">Faltas</div></div>
     <div class="stat"><div class="n">${data.empleadosConBono}</div><div class="l">Con bono de puntualidad</div></div>
     <div class="stat"><div class="n">${data.anySueldoGlobal ? fmtMoney(data.totalPago) : '—'}</div><div class="l">Costo de nómina estimado</div></div>
+    <div class="stat"><div class="n">${fmtMoney(data.totalBonoProduccion)}</div><div class="l">Bono de producción (periodo)</div></div>
   `;
 
   const trendWeeks = buildTrendWeeks(to);
