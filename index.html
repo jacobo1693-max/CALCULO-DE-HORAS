@@ -3736,6 +3736,9 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
   }
 
   const periodoTxt = {semanal:'semana', quincenal:'quincena', mensual:'mes'}[periodo];
+  const horasPorDia = horasNormales / (dias - dias/7);
+  const diasTrabajadosEquiv = trabajoCompleto ? null : horasTrabajadas/horasPorDia;
+  const diasSeptimoProporcional = trabajoCompleto ? null : diasTrabajadosEquiv/6;
 
   area.innerHTML = `
     <div class="form-card">
@@ -3745,7 +3748,7 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
         <tr><td>Sueldo normal (${(dias-dias/7).toFixed(2)} días)</td><td class="mono">${fmtMoney(sueldoDiario*(dias-dias/7))}</td></tr>
         <tr><td>Séptimo día (${(dias/7).toFixed(2)} días)</td><td class="mono">${fmtMoney(sueldoDiario*(dias/7))}</td></tr>
         ` : `
-        <tr><td>Sueldo (proporcional a ${horasTrabajadas} de ${horasNormales} horas)</td><td class="mono">${fmtMoney(sueldoAPagar)}</td></tr>
+        <tr><td>Sueldo (proporcional a ${horasTrabajadas} de ${horasNormales} horas ≈ ${diasTrabajadosEquiv.toFixed(2)} días)</td><td class="mono">${fmtMoney(sueldoAPagar)}</td></tr>
         `}
         <tr><td>Bono de asistencia (${bonoPct}%, sobre la semana completa)${sinBono?' — no aplica esta vez':''}</td><td class="mono">${fmtMoney(bono)}</td></tr>
         <tr><td><b>Total gravable</b></td><td class="mono"><b>${fmtMoney(gravable)}</b></td></tr>
@@ -3777,6 +3780,12 @@ document.getElementById('btnCalcularNomina').addEventListener('click', ()=>{
         <tr><td>Sueldo + bono de asistencia semanal, ya con ISR e IMSS descontados</td><td class="mono">${fmtMoney(netoSinProduccion)}</td></tr>
         <tr><td>+ Bono de producción (neto, sin descuentos)</td><td class="mono">${fmtMoney(bonoProduccion)}</td></tr>
       </table>
+      ${!trabajoCompleto ? `
+      <div class="stat" style="margin-top:14px; max-width:420px; border-color:#c2780c;">
+        <div class="n" style="color:#c2780c;">${diasTrabajadosEquiv.toFixed(2)} días</div>
+        <div class="l">DÍAS A CAPTURAR EN MICROSIP (por las ${horasTrabajadas} horas trabajadas)</div>
+      </div>
+      <p class="sub" style="margin-top:6px;">Cálculo: ${horasTrabajadas} horas ÷ ${horasPorDia.toFixed(2)} horas por día (${horasNormales} horas ÷ ${(dias-dias/7).toFixed(0)} días laborables de la semana) = ${diasTrabajadosEquiv.toFixed(2)} días. Su séptimo día proporcional sería ${diasSeptimoProporcional.toFixed(2)} días (${diasTrabajadosEquiv.toFixed(2)} ÷ 6).</p>` : ''}
       <div class="row" style="margin-top:14px; gap:16px;">
         ${bonoProduccion>0 ? `<div class="stat" style="max-width:280px;">
           <div class="n" style="color:#13233b;">${fmtMoney(bonoProduccion)}</div>
