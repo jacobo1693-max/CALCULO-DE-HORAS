@@ -2741,15 +2741,17 @@ function computeDay(id, fecha){
   }
   return { punches: dayPunches, segments, totalMins, incomplete };
 }
-function isEarlyArrivalAuthorized(id, fecha){
-  return AUTORIZACIONES[`${id}|${fecha}|temprano`] === true; // por default NO autorizada (no se paga)
+function getExtraTempranoAutorizadoMins(id, fecha, disponibles){
+  const v = AUTORIZACIONES[`${id}|${fecha}|temprano`];
+  if(v===undefined || v===false) return 0;      // por default, nada autorizado
+  if(v===true) return disponibles;                // compatibilidad con datos viejos (sí/no)
+  return Math.max(0, Math.min(+v, disponibles));  // valor numérico = minutos autorizados
 }
-async function toggleEarlyAuthorization(id, fecha){
-  const key = `${id}|${fecha}|temprano`;
-  const was = isEarlyArrivalAuthorized(id, fecha);
-  AUTORIZACIONES[key] = !was;
+async function setExtraTempranoAutorizado(id, fecha, horas, disponibles){
+  const mins = Math.max(0, Math.min(Math.round((+horas||0)*60), disponibles));
+  AUTORIZACIONES[`${id}|${fecha}|temprano`] = mins;
   await saveStorage();
-  toast(!was ? 'Llegada temprano autorizada — ya se paga como hora extra.' : 'Llegada temprano ya no autorizada — ya no se paga.');
+  toast(`Llegada temprano: se autorizaron ${(mins/60).toFixed(2)} de ${(disponibles/60).toFixed(2)} horas.`);
   if(window._lastReportParams){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
@@ -2761,15 +2763,17 @@ function getSueldoHora(id){
 function fmtMoney(n){
   return '$' + n.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
-function isExtraAuthorized(id, fecha){
-  return AUTORIZACIONES[`${id}|${fecha}`] !== false; // por default, autorizada (compatibilidad hacia atrás)
+function getExtraTardeAutorizadoMins(id, fecha, disponibles){
+  const v = AUTORIZACIONES[`${id}|${fecha}`];
+  if(v===undefined || v===true) return disponibles; // por default, todo autorizado (compatibilidad hacia atrás)
+  if(v===false) return 0;
+  return Math.max(0, Math.min(+v, disponibles));     // valor numérico = minutos autorizados
 }
-async function toggleAutorizacion(id, fecha){
-  const key = `${id}|${fecha}`;
-  const wasAuthorized = isExtraAuthorized(id, fecha);
-  AUTORIZACIONES[key] = !wasAuthorized;
+async function setExtraTardeAutorizado(id, fecha, horas, disponibles){
+  const mins = Math.max(0, Math.min(Math.round((+horas||0)*60), disponibles));
+  AUTORIZACIONES[`${id}|${fecha}`] = mins;
   await saveStorage();
-  toast(!wasAuthorized ? 'Hora extra autorizada.' : 'Hora extra retirada (no autorizada) — no se pagará.');
+  toast(`Hora extra: se autorizaron ${(mins/60).toFixed(2)} de ${(disponibles/60).toFixed(2)} horas.`);
   if(window._lastReportParams){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
@@ -2782,7 +2786,7 @@ function computePagoDia(id, fecha, totalMins, primeraChecadaTs){
 
   // Si llegó antes de su hora de entrada programada, esos minutos se separan como
   // "hora extra de la mañana": se ven y se suman a las horas trabajadas, pero solo
-  // se PAGAN si se autorizan explícitamente (por default NO están autorizadas).
+  // se PAGAN (y cuentan en "horas totales") las que tú autorices explícitamente.
   let extraTempranoMins = 0;
   if(primeraChecadaTs!=null && sched.activo && sched.entrada && !sched.flexible){
     const entradaProgTs = new Date(fecha+'T00:00:00').getTime() + timeToMins(sched.entrada)*60000;
@@ -2790,24 +2794,30 @@ function computePagoDia(id, fecha, totalMins, primeraChecadaTs){
       extraTempranoMins = Math.min(Math.round((entradaProgTs - primeraChecadaTs)/60000), totalMins);
     }
   }
-  const autorizadoTemprano = isEarlyArrivalAuthorized(id, fecha);
+  const extraTempranoAutorizadoMins = getExtraTempranoAutorizadoMins(id, fecha, extraTempranoMins);
 
   const coreMins = Math.max(0, totalMins - extraTempranoMins); // trabajado desde su hora de entrada en adelante
   const normalMins = Math.min(coreMins, jornadaMins);
   const extraTardeMins = Math.max(0, coreMins - jornadaMins);
-  const autorizadoTarde = isExtraAuthorized(id, fecha);
+  const extraTardeAutorizadoMins = getExtraTardeAutorizadoMins(id, fecha, extraTardeMins);
 
-  const extraMins = extraTempranoMins + extraTardeMins; // para mostrar el total de horas extra del día
-  const autorizado = autorizadoTarde; // compatibilidad: autorización "general" sigue siendo la de salida tarde
+  const extraMins = extraTempranoMins + extraTardeMins; // horas extra reales (checadas), para mostrar
+  const extraMinsAutorizado = extraTempranoAutorizadoMins + extraTardeAutorizadoMins; // horas extra que sí cuentan
+  const autorizado = extraTardeMins>0 && extraTardeAutorizadoMins>=extraTardeMins;
+  const autorizadoTemprano = extraTempranoMins>0 && extraTempranoAutorizadoMins>=extraTempranoMins;
 
   const pagoNormal = (normalMins/60) * sueldoHora;
-  const pagoExtraTarde = autorizadoTarde ? (extraTardeMins/60) * sueldoHora * mult : 0;
-  const pagoExtraTemprano = autorizadoTemprano ? (extraTempranoMins/60) * sueldoHora * mult : 0;
+  const pagoExtraTarde = (extraTardeAutorizadoMins/60) * sueldoHora * mult;
+  const pagoExtraTemprano = (extraTempranoAutorizadoMins/60) * sueldoHora * mult;
   const pagoExtra = pagoExtraTarde + pagoExtraTemprano;
 
+  // "Horas totales" que se muestran en los resúmenes: lo normal + solo la hora extra que autorizaste
+  const totalMinsAutorizado = normalMins + extraMinsAutorizado;
+
   return {
-    sueldoHora, normalMins, extraMins, autorizado, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra,
-    extraTempranoMins, autorizadoTemprano, extraTardeMins, autorizadoTarde
+    sueldoHora, normalMins, extraMins, extraMinsAutorizado, totalMinsAutorizado, autorizado, pagoNormal, pagoExtra, pagoTotal: pagoNormal + pagoExtra,
+    extraTempranoMins, extraTempranoAutorizadoMins, autorizadoTemprano,
+    extraTardeMins, extraTardeAutorizadoMins, autorizadoTarde: autorizado
   };
 }
 function getScheduleFor(id, fecha){
@@ -2947,13 +2957,15 @@ function computeBonoPuntualidadDetalle(id, from, to){
 }
 function computeEmployeePeriod(id, from, to){
   const days = dateRange(from, to);
-  let totalMins=0, retardos=0, faltas=0, laborables=0, extraMins=0, pagoNormal=0, pagoExtra=0;
+  let totalMins=0, totalMinsAutorizado=0, retardos=0, faltas=0, laborables=0, extraMins=0, extraMinsAutorizado=0, pagoNormal=0, pagoExtra=0;
   days.forEach(fecha=>{
     const sched = getScheduleFor(id, fecha);
     const info = computeDay(id, fecha);
     totalMins += info.totalMins;
     const p = computePagoDia(id, fecha, info.totalMins, info.punches.length ? info.punches[0].ts : null);
     extraMins += p.extraMins;
+    extraMinsAutorizado += p.extraMinsAutorizado;
+    totalMinsAutorizado += p.totalMinsAutorizado;
     pagoNormal += p.pagoNormal;
     pagoExtra += p.pagoExtra;
     if(sched.activo){
@@ -2968,7 +2980,7 @@ function computeEmployeePeriod(id, from, to){
   const bono = bonoInfo.bono;
   const bonoPct = bonoInfo.bonoPct;
   const pago = pagoNormal + pagoExtra + bono;
-  return { totalMins, retardos, faltas, laborables, sueldoHora, extraMins, pagoNormal, pagoExtra, bono, puntual, bonoPct, bonoInfo, pago };
+  return { totalMins, totalMinsAutorizado, retardos, faltas, laborables, sueldoHora, extraMins, extraMinsAutorizado, pagoNormal, pagoExtra, bono, puntual, bonoPct, bonoInfo, pago };
 }
 document.getElementById('btnQuickWeek').addEventListener('click', ()=>{
   const d = new Date(); const dow = d.getDay();
@@ -3094,11 +3106,13 @@ function computeReportData(id, from, to){
     return { fecha, laborable, info, status, label };
   });
   const sueldoHora = getSueldoHora(id);
-  let totalExtraMins = 0, totalPagoNormal = 0, totalPagoExtra = 0;
+  let totalExtraMins = 0, totalExtraMinsAutorizado = 0, totalMinsAutorizado = 0, totalPagoNormal = 0, totalPagoExtra = 0;
   rows.forEach(r=>{
     const p = computePagoDia(id, r.fecha, r.info.totalMins, r.info.punches.length ? r.info.punches[0].ts : null);
     r.pago = p;
     totalExtraMins += p.extraMins;
+    totalExtraMinsAutorizado += p.extraMinsAutorizado;
+    totalMinsAutorizado += p.totalMinsAutorizado;
     totalPagoNormal += p.pagoNormal;
     totalPagoExtra += p.pagoExtra;
   });
@@ -3108,13 +3122,13 @@ function computeReportData(id, from, to){
   const bono = bonoInfo.bono;
   const bonoPct = bonoInfo.bonoPct;
   const totalPago = totalPagoNormal + totalPagoExtra + bono;
-  return { id, nombre, from, to, rows, totalMins, retardos, faltas, sueldoHora, totalExtraMins, totalPago, bono, puntual, bonoPct, bonoInfo };
+  return { id, nombre, from, to, rows, totalMins, totalMinsAutorizado, retardos, faltas, sueldoHora, totalExtraMins, totalExtraMinsAutorizado, totalPago, bono, puntual, bonoPct, bonoInfo };
 }
 function reportStatsHtml(rep){
   let html = `
     <div class="stat-grid">
-      <div class="stat"><div class="n">${fmtHM(rep.totalMins)}</div><div class="l">Horas totales</div></div>
-      <div class="stat"><div class="n">${fmtHM(rep.totalExtraMins)}</div><div class="l">Horas extra</div></div>
+      <div class="stat"><div class="n">${fmtHM(rep.totalMinsAutorizado)}</div><div class="l">Horas totales (autorizadas)${rep.totalMinsAutorizado!==rep.totalMins ? `<br><span style="font-size:11px; color:#9fb1c7;">Checadas: ${fmtHM(rep.totalMins)}</span>` : ''}</div></div>
+      <div class="stat"><div class="n">${fmtHM(rep.totalExtraMinsAutorizado)}</div><div class="l">Horas extra autorizadas${rep.totalExtraMinsAutorizado!==rep.totalExtraMins ? `<br><span style="font-size:11px; color:#9fb1c7;">Checadas: ${fmtHM(rep.totalExtraMins)}</span>` : ''}</div></div>
       <div class="stat"><div class="n">${rep.retardos}</div><div class="l">Retardos</div></div>
       <div class="stat"><div class="n">${rep.faltas}</div><div class="l">Faltas</div></div>
       <div class="stat"><div class="n">${rep.sueldoHora ? fmtMoney(rep.sueldoHora) : '—'}</div><div class="l">Sueldo por hora</div></div>
@@ -3137,14 +3151,30 @@ function reportTableHtml(rep){
     if(r.pago.extraMins>0){
       const partes = [];
       if(r.pago.extraTempranoMins>0){
-        const tag = r.pago.autorizadoTemprano ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
-        const label = r.pago.autorizadoTemprano ? 'Quitar autorización' : 'Autorizar';
-        partes.push(`<div style="margin-bottom:6px;"><div>Mañana: ${fmtHM(r.pago.extraTempranoMins)}</div>${tag}<br><button class="btn secondary small" style="margin-top:4px;" onclick="toggleEarlyAuthorization('${rep.id}','${r.fecha}')">${label}</button></div>`);
+        const horasDisp = (r.pago.extraTempranoMins/60).toFixed(2);
+        const horasAut = (r.pago.extraTempranoAutorizadoMins/60).toFixed(2);
+        partes.push(`<div style="margin-bottom:8px;">
+          <div>Mañana: ${fmtHM(r.pago.extraTempranoMins)} checadas</div>
+          <div style="margin-top:3px; display:flex; align-items:center; gap:5px;">
+            <span style="font-size:11px;">Autorizo:</span>
+            <input type="number" min="0" max="${horasDisp}" step="0.25" value="${horasAut}" id="extTemp_${rep.id}_${r.fecha}" style="width:60px; padding:3px 5px; font-size:12px;">
+            <span style="font-size:11px;">de ${horasDisp} h</span>
+          </div>
+          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTempranoAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTemp_${rep.id}_${r.fecha}').value, ${r.pago.extraTempranoMins})">Guardar</button>
+        </div>`);
       }
       if(r.pago.extraTardeMins>0){
-        const tag = r.pago.autorizadoTarde ? `<span class="tag ok">Autorizada</span>` : `<span class="tag absent">No autorizada</span>`;
-        const label = r.pago.autorizadoTarde ? 'Quitar autorización' : 'Autorizar';
-        partes.push(`<div><div>Salida: ${fmtHM(r.pago.extraTardeMins)}</div>${tag}<br><button class="btn secondary small" style="margin-top:4px;" onclick="toggleAutorizacion('${rep.id}','${r.fecha}')">${label}</button></div>`);
+        const horasDisp = (r.pago.extraTardeMins/60).toFixed(2);
+        const horasAut = (r.pago.extraTardeAutorizadoMins/60).toFixed(2);
+        partes.push(`<div>
+          <div>Salida: ${fmtHM(r.pago.extraTardeMins)} checadas</div>
+          <div style="margin-top:3px; display:flex; align-items:center; gap:5px;">
+            <span style="font-size:11px;">Autorizo:</span>
+            <input type="number" min="0" max="${horasDisp}" step="0.25" value="${horasAut}" id="extTarde_${rep.id}_${r.fecha}" style="width:60px; padding:3px 5px; font-size:12px;">
+            <span style="font-size:11px;">de ${horasDisp} h</span>
+          </div>
+          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTardeAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTarde_${rep.id}_${r.fecha}').value, ${r.pago.extraTardeMins})">Guardar</button>
+        </div>`);
       }
       extraCell = partes.join('');
     }
