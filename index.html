@@ -556,6 +556,11 @@
             <input type="file" id="empFotoInput" accept="image/*">
           </div>
         </div>
+        <div class="field" style="min-width:280px;">
+          <label>Expediente (PDF, imagen, Word...)</label>
+          <input type="file" id="empExpedienteInput" accept=".pdf,.doc,.docx,image/*">
+          <div id="empExpedienteActual" class="hint" style="margin-top:6px;"></div>
+        </div>
       </div>
 
       <h3 style="margin-top:20px; margin-bottom:8px;">Datos para contrato (opcional)</h3>
@@ -2119,6 +2124,30 @@ document.getElementById('empFotoInput').addEventListener('change', (e)=>{
     document.getElementById('empFotoPlaceholder').style.display='none';
   });
 });
+let PENDING_EXPEDIENTE = null;
+let PENDING_EXPEDIENTE_REMOVE = false;
+document.getElementById('empExpedienteInput').addEventListener('change', (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const LIMITE = 700*1024; // ~700 KB, para no romper la sincronización con la nube (límite de 1 MB por empleado)
+  if(file.size > LIMITE){
+    toast(`Ese archivo pesa ${(file.size/1024/1024).toFixed(2)} MB — el límite es de 700 KB para poder sincronizarlo con la nube. Comprime el archivo o sube una versión más ligera.`);
+    e.target.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (evt)=>{
+    PENDING_EXPEDIENTE = { nombre: file.name, tipo: file.type, datos: evt.target.result, fecha: isoDate(new Date()) };
+    PENDING_EXPEDIENTE_REMOVE = false;
+    document.getElementById('empExpedienteActual').innerHTML = `Nuevo archivo listo para guardar: <b>${file.name}</b>`;
+  };
+  reader.readAsDataURL(file);
+});
+function quitarExpedienteActual(){
+  PENDING_EXPEDIENTE = null;
+  PENDING_EXPEDIENTE_REMOVE = true;
+  document.getElementById('empExpedienteInput').value = '';
+  document.getElementById('empExpedienteActual').innerHTML = 'Se quitará el expediente al guardar.';
+}
 let PENDING_LOGO = null;
 document.getElementById('cfgLogoInput').addEventListener('change', (e)=>{
   const file = e.target.files[0]; if(!file) return;
@@ -2173,6 +2202,10 @@ function resetEmployeeForm(){
   document.getElementById('empFotoPreview').style.display='none';
   document.getElementById('empFotoPlaceholder').style.display='flex';
   PENDING_PHOTO='';
+  document.getElementById('empExpedienteInput').value='';
+  document.getElementById('empExpedienteActual').innerHTML='';
+  PENDING_EXPEDIENTE = null;
+  PENDING_EXPEDIENTE_REMOVE = false;
   document.getElementById('btnSaveEmployee').textContent='Agregar empleado';
   document.getElementById('btnCancelEditEmployee').style.display='none';
 }
@@ -2206,6 +2239,7 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     beneficiario: document.getElementById('empBeneficiario').value.trim(),
     parentesco: document.getElementById('empParentesco').value.trim(),
     foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : ''),
+    expediente: PENDING_EXPEDIENTE_REMOVE ? null : (PENDING_EXPEDIENTE || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.expediente || null) : null)),
     contrato: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.contrato || null) : null,
     separacion: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.separacion || null) : null
   };
@@ -2266,6 +2300,14 @@ function editEmployee(id){
   if(emp.foto){ document.getElementById('empFotoPreview').src = emp.foto; document.getElementById('empFotoPreview').style.display='inline-block'; document.getElementById('empFotoPlaceholder').style.display='none'; }
   else { document.getElementById('empFotoPreview').style.display='none'; document.getElementById('empFotoPlaceholder').style.display='flex'; }
   PENDING_PHOTO = '';
+  PENDING_EXPEDIENTE = null;
+  PENDING_EXPEDIENTE_REMOVE = false;
+  document.getElementById('empExpedienteInput').value = '';
+  if(emp.expediente){
+    document.getElementById('empExpedienteActual').innerHTML = `Archivo actual: <b>${emp.expediente.nombre}</b> (subido ${emp.expediente.fecha}) — <a href="${emp.expediente.datos}" download="${emp.expediente.nombre}" style="color:var(--teal);">Descargar</a> · <button type="button" class="btn danger small" onclick="quitarExpedienteActual()">Quitar</button>`;
+  } else {
+    document.getElementById('empExpedienteActual').innerHTML = 'Sin expediente subido.';
+  }
   document.getElementById('btnSaveEmployee').textContent = 'Guardar cambios';
   document.getElementById('btnCancelEditEmployee').style.display='inline-block';
   document.querySelector('nav.tabs button[data-tab=employees]').click();
@@ -2298,6 +2340,7 @@ function renderEmployeesTable(){
       <td>${activo ? '<span class="tag ok">Activo</span>' : '<span class="tag absent">Dado de baja</span>'}</td>
       <td><button class="btn secondary small" onclick="editEmployee('${e.id}')">Editar</button>
       <button class="btn secondary small" onclick="printHojaDeVida('${e.id}')">Hoja de vida</button>
+      ${e.expediente ? `<a class="btn secondary small" href="${e.expediente.datos}" download="${e.expediente.nombre}">Descargar expediente</a>` : ''}
       <button class="btn secondary small" onclick="toggleEmployeeActivo('${e.id}')">${activo ? 'Dar de baja' : 'Reactivar'}</button>
       <button class="btn danger small" onclick="deleteEmployee('${e.id}')">Eliminar</button></td>
     </tr>`;
