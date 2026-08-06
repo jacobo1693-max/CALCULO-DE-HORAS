@@ -2747,11 +2747,11 @@ function getExtraTempranoAutorizadoMins(id, fecha, disponibles){
   if(v===true) return disponibles;                // compatibilidad con datos viejos (sí/no)
   return Math.max(0, Math.min(+v, disponibles));  // valor numérico = minutos autorizados
 }
-async function setExtraTempranoAutorizado(id, fecha, horas, disponibles){
-  const mins = Math.max(0, Math.min(Math.round((+horas||0)*60), disponibles));
+async function setExtraTempranoAutorizado(id, fecha, horasParte, minutosParte, disponibles){
+  const mins = Math.max(0, Math.min(Math.round((+horasParte||0)*60 + (+minutosParte||0)), disponibles));
   AUTORIZACIONES[`${id}|${fecha}|temprano`] = mins;
   await saveStorage();
-  toast(`Llegada temprano: se autorizaron ${(mins/60).toFixed(2)} de ${(disponibles/60).toFixed(2)} horas.`);
+  toast(`Llegada temprano: se autorizaron ${fmtHM(mins)} de ${fmtHM(disponibles)}.`);
   if(window._lastReportParams){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
@@ -2769,11 +2769,11 @@ function getExtraTardeAutorizadoMins(id, fecha, disponibles){
   if(v===false) return 0;
   return Math.max(0, Math.min(+v, disponibles));     // valor numérico = minutos autorizados
 }
-async function setExtraTardeAutorizado(id, fecha, horas, disponibles){
-  const mins = Math.max(0, Math.min(Math.round((+horas||0)*60), disponibles));
+async function setExtraTardeAutorizado(id, fecha, horasParte, minutosParte, disponibles){
+  const mins = Math.max(0, Math.min(Math.round((+horasParte||0)*60 + (+minutosParte||0)), disponibles));
   AUTORIZACIONES[`${id}|${fecha}`] = mins;
   await saveStorage();
-  toast(`Hora extra: se autorizaron ${(mins/60).toFixed(2)} de ${(disponibles/60).toFixed(2)} horas.`);
+  toast(`Hora extra: se autorizaron ${fmtHM(mins)} de ${fmtHM(disponibles)}.`);
   if(window._lastReportParams){
     generateEmployeeReport(window._lastReportParams.id, window._lastReportParams.from, window._lastReportParams.to);
   }
@@ -3151,29 +3151,31 @@ function reportTableHtml(rep){
     if(r.pago.extraMins>0){
       const partes = [];
       if(r.pago.extraTempranoMins>0){
-        const horasDisp = (r.pago.extraTempranoMins/60).toFixed(2);
-        const horasAut = (r.pago.extraTempranoAutorizadoMins/60).toFixed(2);
+        const hDisp = Math.floor(r.pago.extraTempranoMins/60), mDisp = r.pago.extraTempranoMins%60;
+        const hAut = Math.floor(r.pago.extraTempranoAutorizadoMins/60), mAut = r.pago.extraTempranoAutorizadoMins%60;
         partes.push(`<div style="margin-bottom:8px;">
           <div>Mañana: ${fmtHM(r.pago.extraTempranoMins)} checadas</div>
-          <div style="margin-top:3px; display:flex; align-items:center; gap:5px;">
+          <div style="margin-top:3px; display:flex; align-items:center; gap:4px;">
             <span style="font-size:11px;">Autorizo:</span>
-            <input type="number" min="0" max="${horasDisp}" step="0.25" value="${horasAut}" id="extTemp_${rep.id}_${r.fecha}" style="width:60px; padding:3px 5px; font-size:12px;">
-            <span style="font-size:11px;">de ${horasDisp} h</span>
+            <input type="number" min="0" max="${hDisp}" step="1" value="${hAut}" id="extTempH_${rep.id}_${r.fecha}" style="width:42px; padding:3px 4px; font-size:12px;"><span style="font-size:11px;">h</span>
+            <input type="number" min="0" max="59" step="1" value="${mAut}" id="extTempM_${rep.id}_${r.fecha}" style="width:42px; padding:3px 4px; font-size:12px;"><span style="font-size:11px;">m</span>
+            <span style="font-size:11px; color:#9fb1c7;">de ${fmtHM(r.pago.extraTempranoMins)}</span>
           </div>
-          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTempranoAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTemp_${rep.id}_${r.fecha}').value, ${r.pago.extraTempranoMins})">Guardar</button>
+          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTempranoAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTempH_${rep.id}_${r.fecha}').value, document.getElementById('extTempM_${rep.id}_${r.fecha}').value, ${r.pago.extraTempranoMins})">Guardar</button>
         </div>`);
       }
       if(r.pago.extraTardeMins>0){
-        const horasDisp = (r.pago.extraTardeMins/60).toFixed(2);
-        const horasAut = (r.pago.extraTardeAutorizadoMins/60).toFixed(2);
+        const hDisp = Math.floor(r.pago.extraTardeMins/60), mDisp = r.pago.extraTardeMins%60;
+        const hAut = Math.floor(r.pago.extraTardeAutorizadoMins/60), mAut = r.pago.extraTardeAutorizadoMins%60;
         partes.push(`<div>
           <div>Salida: ${fmtHM(r.pago.extraTardeMins)} checadas</div>
-          <div style="margin-top:3px; display:flex; align-items:center; gap:5px;">
+          <div style="margin-top:3px; display:flex; align-items:center; gap:4px;">
             <span style="font-size:11px;">Autorizo:</span>
-            <input type="number" min="0" max="${horasDisp}" step="0.25" value="${horasAut}" id="extTarde_${rep.id}_${r.fecha}" style="width:60px; padding:3px 5px; font-size:12px;">
-            <span style="font-size:11px;">de ${horasDisp} h</span>
+            <input type="number" min="0" max="${hDisp}" step="1" value="${hAut}" id="extTardeH_${rep.id}_${r.fecha}" style="width:42px; padding:3px 4px; font-size:12px;"><span style="font-size:11px;">h</span>
+            <input type="number" min="0" max="59" step="1" value="${mAut}" id="extTardeM_${rep.id}_${r.fecha}" style="width:42px; padding:3px 4px; font-size:12px;"><span style="font-size:11px;">m</span>
+            <span style="font-size:11px; color:#9fb1c7;">de ${fmtHM(r.pago.extraTardeMins)}</span>
           </div>
-          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTardeAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTarde_${rep.id}_${r.fecha}').value, ${r.pago.extraTardeMins})">Guardar</button>
+          <button class="btn secondary small" style="margin-top:4px;" onclick="setExtraTardeAutorizado('${rep.id}','${r.fecha}', document.getElementById('extTardeH_${rep.id}_${r.fecha}').value, document.getElementById('extTardeM_${rep.id}_${r.fecha}').value, ${r.pago.extraTardeMins})">Guardar</button>
         </div>`);
       }
       extraCell = partes.join('');
