@@ -1121,8 +1121,20 @@
         <label>Bono de puntualidad (%)</label>
         <input type="number" id="cfgBono" value="7" min="0" step="0.5">
       </div>
+      <div class="field">
+        <label>Día en que empieza tu semana de nómina</label>
+        <select id="cfgDiaInicioSemana">
+          <option value="1">Lunes</option>
+          <option value="2">Martes</option>
+          <option value="3">Miércoles</option>
+          <option value="4">Jueves</option>
+          <option value="5">Viernes</option>
+          <option value="6">Sábado</option>
+          <option value="0">Domingo</option>
+        </select>
+      </div>
     </div>
-    <div class="hint" style="margin-top:14px;">Cualquier hora trabajada en un día por arriba de la jornada esperada se paga como hora extra, multiplicando el sueldo por hora por este factor (ej. 2 = doble) — y solo si la autorizas en el reporte del empleado. El bono de puntualidad se paga sobre el sueldo normal del periodo únicamente a quien no tenga ni una falta ni un retardo en ese rango de fechas.</div>
+    <div class="hint" style="margin-top:14px;">Cualquier hora trabajada en un día por arriba de la jornada esperada se paga como hora extra, multiplicando el sueldo por hora por este factor (ej. 2 = doble) — y solo si la autorizas en el reporte del empleado. El bono de puntualidad se paga sobre el sueldo normal del periodo únicamente a quien no tenga ni una falta ni un retardo en ese rango de fechas. <b>El "día en que empieza tu semana de nómina"</b> define cómo se agrupan las semanas para el bono de puntualidad, el bono anual, y las alertas de 3+ retardos — ajústalo para que coincida con tu periodo de pago real (por ejemplo, si tu nómina va de jueves a miércoles, elige "Jueves").</div>
     <div style="margin-top:18px;">
       <label style="font-size:12px; font-weight:600; color:var(--ink-soft); text-transform:uppercase;">Días laborables (default)</label>
       <div class="checkrow" id="cfgDias">
@@ -1777,6 +1789,7 @@ function applyConfigToForm(){
   document.getElementById('cfgJornada').value = CONFIG.jornada;
   document.getElementById('cfgMultiplicador').value = CONFIG.multiplicador || 2;
   document.getElementById('cfgBono').value = CONFIG.bonoPuntualidad!=null ? CONFIG.bonoPuntualidad : 7;
+  document.getElementById('cfgDiaInicioSemana').value = CONFIG.diaInicioSemana!=null ? CONFIG.diaInicioSemana : 1;
   document.querySelectorAll('#cfgDias input[type=checkbox]').forEach(cb=>{ cb.checked = CONFIG.dias.includes(+cb.value); });
   applyBrand();
   applyCloudFormState();
@@ -2610,6 +2623,7 @@ document.getElementById('btnSaveConfig').addEventListener('click', ()=>{
   CONFIG.jornada = +document.getElementById('cfgJornada').value || 8;
   CONFIG.multiplicador = +document.getElementById('cfgMultiplicador').value || 2;
   CONFIG.bonoPuntualidad = +document.getElementById('cfgBono').value;
+  CONFIG.diaInicioSemana = +document.getElementById('cfgDiaInicioSemana').value;
   if(isNaN(CONFIG.bonoPuntualidad)) CONFIG.bonoPuntualidad = 7;
   CONFIG.dias = Array.from(document.querySelectorAll('#cfgDias input:checked')).map(cb=>+cb.value);
   saveStorage();
@@ -3467,12 +3481,14 @@ function printActa(id, fechaFalta){
 }
 
 function mondayWeekRange(fechaStr){
+  const startDow = (CONFIG.diaInicioSemana!=null) ? CONFIG.diaInicioSemana : 1; // default lunes
   const d = new Date(fechaStr+'T00:00:00');
   const dow = d.getDay();
-  const diffToMonday = (dow===0) ? -6 : 1-dow;
-  const monday = new Date(d); monday.setDate(d.getDate()+diffToMonday);
-  const sunday = new Date(monday); sunday.setDate(monday.getDate()+6);
-  return { from: isoDate(monday), to: isoDate(sunday) };
+  let diff = dow - startDow;
+  if(diff < 0) diff += 7;
+  const inicio = new Date(d); inicio.setDate(d.getDate()-diff);
+  const fin = new Date(inicio); fin.setDate(inicio.getDate()+6);
+  return { from: isoDate(inicio), to: isoDate(fin) };
 }
 function diasVacacionesLFT(anios){
   if(anios < 1) return 0;
