@@ -2854,6 +2854,7 @@ function refreshAllEmployeeSelects(){
 function baseSemanalBono(id){
   const emp = EMPLOYEES.find(e=>e.id===id);
   if(!emp) return 0;
+  if(emp.sueldoDiario) return +emp.sueldoDiario * 7;
   if(emp.sueldoSemanal) return +emp.sueldoSemanal;
   const sueldoHora = getSueldoHora(id);
   if(!sueldoHora) return 0;
