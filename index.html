@@ -255,6 +255,7 @@
     #printArea{ display:block !important; position:absolute; left:0; top:0; width:100%; padding:0; }
     #printArea button{ display:none !important; }
     .page-break{ page-break-after: always; }
+    #printArea > div:last-child{ page-break-after: avoid !important; }
     table{ font-size:11.5px; }
     .tag{ border:1px solid currentColor; }
     @page{ margin:14mm; }
@@ -5027,8 +5028,10 @@ document.getElementById('btnPrintReport').addEventListener('click', ()=>{
   if(window._lastReportAll){
     const all = window._lastReportAll;
     const parts = all.map((rep,idx)=>{
-      const breakStyle = idx < all.length-1 ? 'page-break' : '';
-      return `<div class="${breakStyle}">
+      const esUltimo = idx === all.length-1;
+      const breakStyle = esUltimo ? '' : 'page-break';
+      const avoidStyle = esUltimo ? 'style="page-break-after:avoid;"' : '';
+      return `<div class="${breakStyle}" ${avoidStyle}>
         ${printHeadHtml('Reporte de asistencia', `${rep.nombre} (${rep.id}) · Del ${rep.from} al ${rep.to}`)}
         ${reportStatsHtml(rep)}${reportTableHtml(rep)}${signatureBlockHtml(rep.nombre, rep.id)}
       </div>`;
