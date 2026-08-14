@@ -2242,7 +2242,10 @@ document.getElementById('btnSaveEmployee').addEventListener('click', ()=>{
     foto: PENDING_PHOTO || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.foto || '') : ''),
     expediente: PENDING_EXPEDIENTE_REMOVE ? null : (PENDING_EXPEDIENTE || (editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.expediente || null) : null)),
     contrato: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.contrato || null) : null,
-    separacion: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.separacion || null) : null
+    separacion: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.separacion || null) : null,
+    bonosProduccion: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.bonosProduccion || []) : [],
+    vacacionesTomadas: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.vacacionesTomadas || []) : [],
+    activo: editingKey ? (EMPLOYEES.find(x=>x.id===editingKey)?.activo !== false) : true
   };
   if(editingKey){
     const idx = EMPLOYEES.findIndex(x=>x.id===editingKey);
