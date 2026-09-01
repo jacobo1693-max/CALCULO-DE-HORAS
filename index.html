@@ -2047,14 +2047,24 @@ document.getElementById('btnExportDat').addEventListener('click', ()=>{
 
   if(!checadas.length){ msg.textContent = 'No hay checadas que coincidan con ese filtro.'; return; }
 
-  // Mismo formato que exporta el checador: ID [tab] fecha hora [tab] 0 0 0 0 (separado por tabs)
-  const lineas = checadas.map(p=>`${p.id}\t${p.fecha} ${p.hora}\t0\t1\t0\t0`);
-  const contenido = lineas.join('\r\n');
+  // Formato exacto del checador real: ID (relleno a 9 caracteres) [tab] fecha hora [tab] 1 [tab] estado [tab] 15 [tab] 0
+  // El "estado" (columna 4) se alterna 0/1 por cada checada consecutiva de la MISMA persona en el MISMO día
+  // (0 = entrada, 1 = salida), igual a como lo hace el checador físico.
+  const contadorDia = {}; // clave "id|fecha" -> cuántas checadas van de esa persona ese día
+  const lineas = checadas.map(p=>{
+    const claveDia = `${p.id}|${p.fecha}`;
+    const indice = contadorDia[claveDia] || 0;
+    contadorDia[claveDia] = indice + 1;
+    const estado = indice % 2; // 0,1,0,1...
+    const idRelleno = String(p.id).padStart(9, ' ');
+    return `${idRelleno}\t${p.fecha} ${p.hora}\t1\t${estado}\t15\t0`;
+  });
+  const contenido = lineas.join('\r\n') + '\r\n';
   const blob = new Blob([contenido], {type:'text/plain'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `checadas_${from||'inicio'}_a_${to||'hoy'}.dat`;
+  a.download = `attlog.dat`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
