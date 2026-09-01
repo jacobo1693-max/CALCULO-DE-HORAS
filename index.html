@@ -480,6 +480,27 @@
       </div>
       <div id="manualChecadasArea" style="margin-top:14px;"></div>
     </div>
+
+    <div class="form-card" style="margin-top:22px;">
+      <h3 style="margin-top:0;">Exportar checadas (para AccessPRO u otros sistemas)</h3>
+      <p class="sub">Descarga las checadas guardadas en esta app como un archivo <code>.dat</code>, en el mismo formato que usa el checador — para poder importarlas en AccessPROTime.Net (o cualquier otro sistema que acepte ese formato) desde una USB.</p>
+      <div class="row">
+        <div class="field">
+          <label>Empleado</label>
+          <select id="expDatEmpleado"><option value="">Todos los empleados</option></select>
+        </div>
+        <div class="field">
+          <label>Desde</label>
+          <input type="date" id="expDatDesde">
+        </div>
+        <div class="field">
+          <label>Hasta</label>
+          <input type="date" id="expDatHasta">
+        </div>
+        <button class="btn" id="btnExportDat">Descargar archivo .dat</button>
+      </div>
+      <div class="hint" id="expDatMsg" style="margin-top:10px;"></div>
+    </div>
   </section>
 
   <!-- EMPLOYEES -->
@@ -2004,7 +2025,42 @@ function refreshManualEmpleadoSelect(){
   const ids = activeEmployeeIds();
   sel.innerHTML = '<option value="">-- selecciona empleado --</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
   if(ids.includes(cur)) sel.value = cur;
+
+  const sel2 = document.getElementById('expDatEmpleado');
+  if(sel2){
+    const cur2 = sel2.value;
+    sel2.innerHTML = '<option value="">Todos los empleados</option>' + ids.map(id=>`<option value="${id}">${employeeDisplayName(id)} (${id})</option>`).join('');
+    if(ids.includes(cur2)) sel2.value = cur2;
+  }
 }
+document.getElementById('btnExportDat').addEventListener('click', ()=>{
+  const id = document.getElementById('expDatEmpleado').value;
+  const from = document.getElementById('expDatDesde').value;
+  const to = document.getElementById('expDatHasta').value;
+  const msg = document.getElementById('expDatMsg');
+
+  let checadas = [...PUNCHES];
+  if(id) checadas = checadas.filter(p=>p.id===id);
+  if(from) checadas = checadas.filter(p=>p.fecha>=from);
+  if(to) checadas = checadas.filter(p=>p.fecha<=to);
+  checadas.sort((a,b)=>a.ts-b.ts);
+
+  if(!checadas.length){ msg.textContent = 'No hay checadas que coincidan con ese filtro.'; return; }
+
+  // Mismo formato que exporta el checador: ID [tab] fecha hora [tab] 0 0 0 0 (separado por tabs)
+  const lineas = checadas.map(p=>`${p.id}\t${p.fecha} ${p.hora}\t0\t1\t0\t0`);
+  const contenido = lineas.join('\r\n');
+  const blob = new Blob([contenido], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `checadas_${from||'inicio'}_a_${to||'hoy'}.dat`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  msg.textContent = `Listo: se descargaron ${checadas.length} checadas.`;
+});
 function renderManualChecadas(){
   const id = document.getElementById('manualEmpleado').value;
   const fecha = document.getElementById('manualFecha').value;
