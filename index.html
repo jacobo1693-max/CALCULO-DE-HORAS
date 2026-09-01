@@ -276,6 +276,7 @@
     </div>
     <nav class="tabs">
       <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="monitoreodia">Checadas de Hoy</button>
       <button data-tab="import">Importar checadas</button>
       <button data-tab="employees">Empleados</button>
       <button data-tab="contratos">Contratos</button>
@@ -395,6 +396,17 @@
       <h3 style="margin-top:22px;">Detalle día por día</h3>
       <div id="dashIndividualTable"></div>
     </div>
+  </section>
+
+  <!-- MONITOREO DEL DÍA -->
+  <section class="panel" id="panel-monitoreodia">
+    <h2>Checadas de hoy</h2>
+    <p class="sub">Quién ya checó entrada hoy y quién no, de un vistazo. Última actualización: <b id="monitoreoDiaHora">—</b></p>
+    <div class="row" style="margin-bottom:16px;">
+      <button class="btn secondary" id="btnActualizarMonitoreo">Actualizar</button>
+      <button class="btn" id="btnSincronizarMonitoreo">Sincronizar con la nube y actualizar</button>
+    </div>
+    <div id="monitoreoDiaArea"></div>
   </section>
 
   <!-- IMPORT -->
@@ -1835,6 +1847,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
     document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
     document.getElementById('topbarTitle').textContent = btn.textContent;
     if(btn.dataset.tab === 'dashboard') renderDashboard();
+    if(btn.dataset.tab === 'monitoreodia') renderMonitoreoDia();
     if(btn.dataset.tab === 'vacaciones') renderVacacionesResumen();
     if(btn.dataset.tab === 'bonoproduccion') renderBonoProdResumen();
   });
@@ -5336,6 +5349,76 @@ function renderDashboardIndividual(id, from, to){
   document.getElementById('dashIndividualStats').innerHTML = `<h3 style="margin-top:14px;">${rep.nombre} <span style="font-weight:400; color:#7f93ac;">(${rep.id})</span></h3>` + reportStatsHtml(rep);
   document.getElementById('dashIndividualTable').innerHTML = reportTableHtml(rep);
 }
+function renderMonitoreoDia(){
+  const area = document.getElementById('monitoreoDiaArea');
+  if(!area) return;
+  const hoy = isoDate(new Date());
+  const ids = activeEmployeeIds();
+
+  const filas = ids.map(id=>{
+    const nombre = employeeDisplayName(id);
+    const emp = EMPLOYEES.find(e=>e.id===id);
+    const turno = TURNOS.find(t=>t.id===emp?.turnoId);
+    const sched = getScheduleFor(id, hoy);
+    const info = computeDay(id, hoy);
+    let estado, horaEntrada, orden;
+    if(!sched.activo){
+      estado = 'No le toca hoy'; horaEntrada = '—'; orden = 3;
+    } else if(info.punches.length===0){
+      estado = 'Aún no llega'; horaEntrada = '—'; orden = 0;
+    } else {
+      const llego = info.punches[0].hora.slice(0,5);
+      const tarde = isLate(id, info.punches, hoy);
+      estado = tarde ? 'Llegó con retardo' : 'A tiempo';
+      horaEntrada = llego;
+      orden = tarde ? 1 : 2;
+    }
+    const ultimaHora = info.punches.length ? info.punches[info.punches.length-1].hora.slice(0,5) : '—';
+    return { id, nombre, turnoNombre: turno ? turno.nombre : '—', horaEsperada: sched.entrada || '—', estado, horaEntrada, ultimaHora, orden };
+  });
+  filas.sort((a,b)=> a.orden-b.orden || a.nombre.localeCompare(b.nombre));
+
+  const yaLlegaron = filas.filter(f=>f.orden===1||f.orden===2).length;
+  const conRetardo = filas.filter(f=>f.orden===1).length;
+  const noLlegan = filas.filter(f=>f.orden===0).length;
+  const noLesToca = filas.filter(f=>f.orden===3).length;
+
+  let html = `<div class="stat-grid" style="margin-bottom:18px;">
+    <div class="stat"><div class="n">${yaLlegaron}</div><div class="l">Ya checaron entrada</div></div>
+    <div class="stat"><div class="n">${conRetardo}</div><div class="l">Llegaron con retardo</div></div>
+    <div class="stat"><div class="n">${noLlegan}</div><div class="l">Aún no llegan (les toca hoy)</div></div>
+    <div class="stat"><div class="n">${noLesToca}</div><div class="l">No les toca hoy</div></div>
+  </div>`;
+
+  if(!filas.length){
+    html += emptyState('No hay empleados activos registrados todavía.');
+  } else {
+    html += `<table><thead><tr><th>Empleado</th><th>No.</th><th>Turno</th><th>Hora esperada</th><th>Estado</th><th>Entrada</th><th>Última checada</th></tr></thead><tbody>`;
+    filas.forEach(f=>{
+      const tagCls = f.orden===0 ? 'absent' : (f.orden===1 ? 'late' : (f.orden===2 ? 'ok' : 'neutral'));
+      html += `<tr>
+        <td><b>${f.nombre}</b></td>
+        <td class="mono">${f.id}</td>
+        <td>${f.turnoNombre}</td>
+        <td class="mono">${f.horaEsperada}</td>
+        <td><span class="tag ${tagCls}">${f.estado}</span></td>
+        <td class="mono">${f.horaEntrada}</td>
+        <td class="mono">${f.ultimaHora}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  area.innerHTML = html;
+  document.getElementById('monitoreoDiaHora').textContent = new Date().toLocaleTimeString('es-MX');
+}
+document.getElementById('btnActualizarMonitoreo').addEventListener('click', renderMonitoreoDia);
+document.getElementById('btnSincronizarMonitoreo').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnSincronizarMonitoreo');
+  btn.disabled = true; btn.textContent = 'Sincronizando…';
+  await syncNowButton();
+  renderMonitoreoDia();
+  btn.disabled = false; btn.textContent = 'Sincronizar con la nube y actualizar';
+});
 function renderDashboard(){
   const kind = document.getElementById('dashPeriodo').value;
   let from, to;
