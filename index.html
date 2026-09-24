@@ -5602,7 +5602,9 @@ function renderDashboard(){
     ? `<table><thead><tr><th>Empleado</th><th>Retardos</th><th>Faltas</th></tr></thead><tbody>${topInc.map(e=>`<tr class="clickable" onclick="goToEmployeeReport('${escAttr(e.id)}','${from}','${to}')"><td>${e.nombre}</td><td class="mono">${e.retardos}</td><td class="mono">${e.faltas}</td></tr>`).join('')}</tbody></table>`
     : emptyState('Sin retardos ni faltas en este periodo.');
 }
-   ---------- init ----------
+
+/* ---------- init ---------- */
+loadStorage();
 </script>
 </body>
 </html>
