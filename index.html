@@ -5604,7 +5604,73 @@ function renderDashboard(){
 }
 
 /* ---------- init ---------- */
-loadStorage();
+/* Checadas y empleados se guardan en IndexedDB (mucho más espacio) en vez de localStorage (~5 MB). */
+const BIG_KEYS = ['bm160app_bm160-punches','bm160app_bm160-employees'];
+const BIG_CACHE = {};
+let IDB_DB = null;
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open('bm160app_db', 1);
+    req.onupgradeneeded = ()=> req.result.createObjectStore('kv');
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+}
+function idbGet(key){
+  return new Promise((resolve,reject)=>{
+    const r = IDB_DB.transaction('kv','readonly').objectStore('kv').get(key);
+    r.onsuccess = ()=> resolve(r.result);
+    r.onerror = ()=> reject(r.error);
+  });
+}
+function idbPut(key, value){
+  return new Promise((resolve,reject)=>{
+    const tx = IDB_DB.transaction('kv','readwrite');
+    if(value===null) tx.objectStore('kv').delete(key); else tx.objectStore('kv').put(value, key);
+    tx.oncomplete = ()=> resolve();
+    tx.onerror = ()=> reject(tx.error);
+  });
+}
+const _lsGet = Storage.prototype.getItem, _lsSet = Storage.prototype.setItem, _lsRemove = Storage.prototype.removeItem;
+async function initBigStorage(){
+  try{
+    IDB_DB = await idbOpen();
+    const viejos = {};
+    for(const k of BIG_KEYS){
+      let v = await idbGet(k);
+      const viejo = _lsGet.call(localStorage, k);
+      if(v==null && viejo!=null){ await idbPut(k, viejo); v = viejo; }
+      if(v!=null) BIG_CACHE[k] = v;
+      if(viejo!=null) viejos[k] = true;
+    }
+    Object.keys(viejos).forEach(k=>_lsRemove.call(localStorage, k));
+  }catch(e){
+    console.error('IndexedDB no disponible, se sigue usando localStorage', e);
+    IDB_DB = null;
+    return;
+  }
+  Storage.prototype.getItem = function(k){
+    if(this===localStorage && BIG_KEYS.includes(k)) return BIG_CACHE[k]!==undefined ? BIG_CACHE[k] : null;
+    return _lsGet.call(this, k);
+  };
+  Storage.prototype.setItem = function(k, v){
+    if(this===localStorage && BIG_KEYS.includes(k)){
+      BIG_CACHE[k] = String(v);
+      idbPut(k, BIG_CACHE[k]).catch(e=>console.error('Error guardando en IndexedDB', k, e));
+      return;
+    }
+    return _lsSet.call(this, k, v);
+  };
+  Storage.prototype.removeItem = function(k){
+    if(this===localStorage && BIG_KEYS.includes(k)){
+      delete BIG_CACHE[k];
+      idbPut(k, null).catch(e=>console.error('Error borrando en IndexedDB', k, e));
+      return;
+    }
+    return _lsRemove.call(this, k);
+  };
+}
+initBigStorage().then(loadStorage);
 </script>
 </body>
 </html>
